@@ -104,7 +104,7 @@ function buildReminderHtml({ name, title, roomName, areaName, timeStart, timeEnd
         <!-- Footer -->
         <tr>
           <td style="background:#161310;padding:16px 32px;text-align:center;border-top:1px solid ${border};">
-            <span style="color:#5a4a35;font-size:12px;">AMIS Meeting Room Booking System</span>
+            <span style="color:#5a4a35;font-size:12px;">Smart Meeting Room Booking System</span>
           </td>
         </tr>
       </table>

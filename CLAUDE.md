@@ -1,8 +1,8 @@
-# CLAUDE.md — Dự án Đặt Phòng Họp (AMIS-style)
+# CLAUDE.md — Dự án Đặt Phòng Họp
 
 ## Tổng quan dự án
 
-Hệ thống quản lý và đặt phòng họp dạng AMIS MISA. Người dùng tìm phòng, xem lịch trên calendar, đặt phòng; admin quản lý phòng/khu vực/người dùng và xem báo cáo thống kê.
+Hệ thống quản lý và đặt phòng họp thông minh (Smart Meeting Room). Người dùng tìm phòng, xem lịch trên calendar, đặt phòng; admin quản lý phòng/khu vực/người dùng và xem báo cáo thống kê.
 
 **Trạng thái:** Đang phát triển — MVP + P0/P1 hoàn thành, đang hoàn thiện UI/UX nâng cao.
 
@@ -205,7 +205,7 @@ Legacy redirects: `/list-room` → `/admin/rooms`, `/approvals` → `/admin/appr
 | # | Hạng mục | Ưu tiên | Ghi chú |
 |---|---|---|---|
 | A | Equipment icon hiển thị trên Home card | P1 | Hiện chỉ có ở BookDetail và CalendarView header |
-| B | Report page redesign (AMIS style) | P1 | Thêm tỷ lệ sử dụng, top phòng, export |
+| B | Report page redesign | P1 | Thêm tỷ lệ sử dụng, top phòng, export |
 | C | Email nhắc lịch tự động (cron) | P2 | nodemailer + node-cron; deferred vì cần SMTP config |
 | D | Vai trò gắn với User (phân quyền thực) | P2 | Hiện Role chỉ là định nghĩa, permission vẫn dùng Roles=0/1 |
 | E | Notification trong app | P3 | Khi lịch được duyệt/từ chối |

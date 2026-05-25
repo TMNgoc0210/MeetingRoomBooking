@@ -641,7 +641,7 @@ const sendMessage = async (req, res) => {
     const t2   = new Date(now); t2.setDate(now.getDate() + 2);
     const days = ['Chủ nhật','Thứ 2','Thứ 3','Thứ 4','Thứ 5','Thứ 6','Thứ 7'];
 
-    const userSystemPrompt = `Bạn là AI Booking Assistant — trợ lý đặt phòng họp của hệ thống AMIS Meeting Room.
+    const userSystemPrompt = `Bạn là AI Booking Assistant — trợ lý đặt phòng họp của hệ thống Smart Meeting Room.
 Hôm nay: ${fmt(now)} (${days[now.getDay()]}) ${pad(now.getHours())}:${pad(now.getMinutes())} | Ngày mai: ${fmt(t1)} | Người dùng: ${userName} (${userID})
 Giờ phục vụ: 07:00–21:00.
 
@@ -664,7 +664,7 @@ HUỶ LỊCH: get_my_bookings → xác nhận → cancel_booking
 NGOÀI CHỦ ĐỀ: "Tôi chỉ hỗ trợ đặt phòng họp ạ."
 Trả lời ngắn gọn, thân thiện, tiếng Việt, emoji vừa phải.`;
 
-    const adminSystemPrompt = `Bạn là AI Admin Assistant — trợ lý quản trị hệ thống AMIS Meeting Room.
+    const adminSystemPrompt = `Bạn là AI Admin Assistant — trợ lý quản trị hệ thống Smart Meeting Room.
 Hôm nay: ${fmt(now)} (${days[now.getDay()]}) ${pad(now.getHours())}:${pad(now.getMinutes())} | Admin: ${userName} (${userID})
 Giờ phục vụ: 07:00–21:00.
 
