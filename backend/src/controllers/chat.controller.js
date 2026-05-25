@@ -8,7 +8,9 @@ const Groq = require('groq-sdk');
 const { query, queryOne, execute } = require('../config/db');
 const { success, error, badRequest } = require('../utils/response');
 
-const MODEL = 'llama-3.3-70b-versatile';
+const MODEL_PRIMARY  = 'llama-3.3-70b-versatile'; // 6k TPM — quality
+const MODEL_FALLBACK = 'llama-3.1-8b-instant';    // 20k TPM — high limit
+const MODEL = MODEL_PRIMARY;
 
 // ─── Groq singleton ───────────────────────────────────────────────────────────
 let _groq = null;
@@ -643,6 +645,9 @@ const ADMIN_TOOLS = [
   },
 ];
 
+// ─── Helper: sleep ────────────────────────────────────────────────────────────
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
 // ─── ReAct loop ───────────────────────────────────────────────────────────────
 async function runAI({ messages, systemPrompt, userID, tools }) {
   const groq = getGroq();
@@ -653,22 +658,42 @@ async function runAI({ messages, systemPrompt, userID, tools }) {
   for (let i = 0; i < 6; i++) {
     let resp;
     try {
-      resp = await groq.chat.completions.create({
-        model: MODEL,
-        messages: all,
-        tools,
-        tool_choice: 'auto',
-        max_tokens: 1200,
-        temperature: 0.2,
-      });
+      // Thử model chính (70b) trước, nếu rate-limit thì fallback sang 8b
+      let lastErr;
+      for (const [modelName, delayMs] of [
+        [MODEL_PRIMARY,  0],
+        [MODEL_FALLBACK, 1500],
+      ]) {
+        if (delayMs) await sleep(delayMs);
+        try {
+          resp = await groq.chat.completions.create({
+            model: modelName,
+            messages: all,
+            tools,
+            tool_choice: 'auto',
+            max_tokens: 1200,
+            temperature: 0.2,
+          });
+          lastErr = null;
+          break; // thành công → thoát vòng retry
+        } catch (e) {
+          lastErr = e;
+          const isRateLimit = e.status === 429 || e.message?.includes('rate limit') || e.message?.includes('Rate limit');
+          if (!isRateLimit) break; // lỗi khác → không retry
+          console.warn(`[Chat] Rate limit on ${modelName}, retrying with fallback...`);
+        }
+      }
+      if (lastErr) throw lastErr;
     } catch (apiErr) {
-      // Model sinh XML-style tool call hoặc lỗi Groq API → kết thúc loop
       console.error('[Chat] Groq API error in loop:', apiErr.message?.slice(0, 120));
-      const isToolFmt = apiErr.message?.includes('tool call validation failed');
+      const isToolFmt  = apiErr.message?.includes('tool call validation failed');
+      const isRateLimit = apiErr.status === 429 || apiErr.message?.includes('rate limit');
       return {
         reply: isToolFmt
           ? 'Tôi chưa hiểu rõ yêu cầu. Bạn có thể thử diễn đạt lại không?'
-          : 'AI gặp lỗi tạm thời, vui lòng thử lại.',
+          : isRateLimit
+            ? 'AI đang quá tải, vui lòng thử lại sau vài giây ⏳'
+            : 'AI gặp lỗi tạm thời, vui lòng thử lại.',
         bookingResult, pendingData, history: all.slice(1),
       };
     }
@@ -931,8 +956,8 @@ const sendMessage = async (req, res) => {
     let msg = 'AI đang gặp sự cố, vui lòng thử lại.';
     if (raw.includes('tool call validation failed') || raw.includes('invalid_request_error')) {
       msg = 'AI không thể xử lý yêu cầu theo cách này. Vui lòng thử diễn đạt khác.';
-    } else if (raw.includes('rate limit') || raw.includes('quota')) {
-      msg = 'AI đang quá tải, vui lòng thử lại sau ít giây.';
+    } else if (raw.includes('rate limit') || raw.includes('quota') || err.status === 429) {
+      msg = 'AI đang quá tải, vui lòng thử lại sau vài giây ⏳';
     } else if (raw.includes('GROQ_API_KEY') || raw.includes('API key')) {
       msg = 'Chưa cấu hình API key AI.';
     }
