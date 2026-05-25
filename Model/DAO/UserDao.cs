@@ -21,7 +21,7 @@ namespace Model.DAO
 
         public UserSession Login(string username, string password)
         {
-            string hassPass = password.SHA256Hash();
+           // string hassPass = password.SHA256Hash();
                 var data = db.Users.Join(db.Faculties, x => x.FacultyID, y => y.FacultyID, (x, y) => new UserSession
                 {
                     UserID      = x.UserID,
@@ -38,7 +38,7 @@ namespace Model.DAO
                     FacutlyID   = x.FacultyID,
                     FacutlyName = y.FacultyName
 
-                }).FirstOrDefault(x => x.UserID == username && x.Visible == true && x.Password == hassPass);
+                }).FirstOrDefault(x => x.UserID == username && x.Visible == true && x.Password == password);
 
             if (data != null)
             {
