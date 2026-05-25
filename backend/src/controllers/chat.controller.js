@@ -1,28 +1,17 @@
 /**
- * AI Chat Controller — Groq + Llama 3.3 70B
- * Đề cương: Entity Extraction, Clarification, DB Action, Conflict Resolution,
- *            Q&A, Cancel, Relative Time, Fallback, UI Card
+ * AI Chat Controller — Gemini 1.5 Flash (direct REST, no LangChain)
+ * 1M TPM / 1500 RPD free tier — function calling native support
  */
 
-const Groq = require('groq-sdk');
 const { query, queryOne, execute } = require('../config/db');
 const { success, error, badRequest } = require('../utils/response');
 
-const MODEL_PRIMARY  = 'llama-3.3-70b-versatile'; // 6k TPM — best function calling
-const MODEL_FALLBACK = 'llama-3.1-8b-instant';    // 20k TPM — fallback plain text
-
-// ─── Groq singleton ───────────────────────────────────────────────────────────
-let _groq = null;
-function getGroq() {
-  if (!_groq && process.env.GROQ_API_KEY) {
-    _groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-  }
-  return _groq;
-}
+const GEMINI_MODEL = 'gemini-1.5-flash';
+const GEMINI_URL   = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 // ─── Server-side session memory ───────────────────────────────────────────────
 const sessionStore = new Map();
-const SESSION_TTL = 30 * 60 * 1000;
+const SESSION_TTL  = 30 * 60 * 1000;
 
 function getSession(userID) {
   const now = Date.now();
@@ -51,19 +40,19 @@ async function searchAvailableRooms({ date, startTime, durationMinutes, minSeat,
   const hh = parts[0], mm = parts[1] || 0;
   if (isNaN(hh) || isNaN(mm)) return { error: 'Giờ không hợp lệ, dùng format HH:mm' };
 
-  const dur = parseInt(durationMinutes) || 60;
+  const dur      = parseInt(durationMinutes) || 60;
   const totalMin = hh * 60 + mm + dur;
-  const endH = Math.floor(totalMin / 60);
-  const endM = totalMin % 60;
+  const endH     = Math.floor(totalMin / 60);
+  const endM     = totalMin % 60;
 
   if (hh < 7 || endH > 21 || (endH === 21 && endM > 0))
     return { error: 'Hệ thống phục vụ trong giờ 07:00–21:00' };
 
-  const timeStart = `${date} ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:00`;
-  const timeEnd   = `${date} ${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}:00`;
-  const cap       = parseInt(minSeat) || 1;
+  const timeStart  = `${date} ${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}:00`;
+  const timeEnd    = `${date} ${String(endH).padStart(2,'0')}:${String(endM).padStart(2,'0')}:00`;
+  const cap        = parseInt(minSeat) || 1;
   const nameFilter = roomName ? `AND r.RoomName LIKE '%' || @roomName || '%'` : '';
-  const params = { cap, timeStart, timeEnd };
+  const params     = { cap, timeStart, timeEnd };
   if (roomName) params.roomName = roomName;
 
   const rooms = await query(
@@ -80,7 +69,6 @@ async function searchAvailableRooms({ date, startTime, durationMinutes, minSeat,
   );
 
   if (rooms.length === 0) {
-    // Gợi ý phòng có thể dùng giờ khác
     const anyRooms = await query(
       `SELECT r.RoomID, r.RoomName, r.Seat, a.AreaName
        FROM Room r LEFT JOIN Area a ON r.AreaID = a.AreaID
@@ -105,13 +93,13 @@ async function searchAvailableRooms({ date, startTime, durationMinutes, minSeat,
 
 // ─── Tool: Đặt phòng ─────────────────────────────────────────────────────────
 async function bookRoom({ roomID, date, startTime, durationMinutes, title, numberPerson, userID, serviceRequest }) {
-  const dur = parseInt(durationMinutes) || 60;
-  const parts = startTime.split(':').map(Number);
-  const hh = parts[0], mm = parts[1] || 0;
-  const totalMin = hh * 60 + mm + dur;
-  const endH = String(Math.floor(totalMin / 60)).padStart(2, '0');
-  const endM = String(totalMin % 60).padStart(2, '0');
-  const timeStart = `${date} ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:00`;
+  const dur    = parseInt(durationMinutes) || 60;
+  const parts  = startTime.split(':').map(Number);
+  const hh     = parts[0], mm = parts[1] || 0;
+  const total  = hh * 60 + mm + dur;
+  const endH   = String(Math.floor(total / 60)).padStart(2,'0');
+  const endM   = String(total % 60).padStart(2,'0');
+  const timeStart = `${date} ${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}:00`;
   const timeEnd   = `${date} ${endH}:${endM}:00`;
   const num       = parseInt(numberPerson) || 1;
 
@@ -125,10 +113,10 @@ async function bookRoom({ roomID, date, startTime, durationMinutes, title, numbe
     const alts = await query(
       `SELECT r.RoomID, r.RoomName, r.Seat, a.AreaName FROM Room r
        LEFT JOIN Area a ON r.AreaID = a.AreaID
-       WHERE r.Visible = 1 AND r.Seat >= @num AND r.RoomID != @roomID
+       WHERE r.Visible=1 AND r.Seat>=@num AND r.RoomID!=@roomID
          AND r.RoomID NOT IN (
            SELECT RoomID FROM LineRoom
-           WHERE Status != 3 AND TimeStart < @timeEnd AND TimeEnd > @timeStart
+           WHERE Status!=3 AND TimeStart<@timeEnd AND TimeEnd>@timeStart
          )
        ORDER BY r.Seat LIMIT 3`,
       { num, roomID: parseInt(roomID), timeStart, timeEnd }
@@ -161,26 +149,21 @@ async function bookRoom({ roomID, date, startTime, durationMinutes, title, numbe
 
 // ─── Tool: Xem lịch của tôi ───────────────────────────────────────────────────
 async function getMyBookings({ userID, period }) {
-  // period: 'upcoming' (default) | 'past' | 'all'
   const STATUS = { 0: 'Chờ duyệt', 1: 'Đã duyệt', 2: 'Từ chối', 3: 'Đã huỷ' };
-
   let timeFilter, orderDir, limitNum, emptyMsg;
+
   if (period === 'past') {
     timeFilter = `lr.TimeEnd < datetime('now','localtime')`;
-    orderDir   = 'DESC';
-    limitNum   = 15;
-    emptyMsg   = 'Bạn chưa có lịch đặt phòng nào trong quá khứ.';
+    orderDir = 'DESC'; limitNum = 15;
+    emptyMsg = 'Bạn chưa có lịch đặt phòng nào trong quá khứ.';
   } else if (period === 'all') {
     timeFilter = '1=1';
-    orderDir   = 'DESC';
-    limitNum   = 20;
-    emptyMsg   = 'Bạn chưa có lịch đặt phòng nào.';
+    orderDir = 'DESC'; limitNum = 20;
+    emptyMsg = 'Bạn chưa có lịch đặt phòng nào.';
   } else {
-    // upcoming (default)
     timeFilter = `lr.TimeEnd >= datetime('now','localtime') AND lr.Status != 3`;
-    orderDir   = 'ASC';
-    limitNum   = 10;
-    emptyMsg   = 'Bạn chưa có lịch đặt phòng nào sắp tới.';
+    orderDir = 'ASC'; limitNum = 10;
+    emptyMsg = 'Bạn chưa có lịch đặt phòng nào sắp tới.';
   }
 
   const rows = await query(
@@ -194,10 +177,8 @@ async function getMyBookings({ userID, period }) {
   );
 
   if (!rows.length) return { found: false, message: emptyMsg };
-
   return {
-    found: true,
-    period: period || 'upcoming',
+    found: true, period: period || 'upcoming',
     bookings: rows.map(r => ({
       lineRoomID: r.LineRoomID, title: r.Title,
       room: r.RoomName, area: r.AreaName,
@@ -214,32 +195,26 @@ async function cancelBooking({ lineRoomID, userID }) {
     `SELECT UserID, Status, Title FROM LineRoom WHERE LineRoomID=@id`,
     { id: parseInt(lineRoomID) }
   );
-  if (!lr)                return { success: false, error: 'Không tìm thấy lịch đặt' };
+  if (!lr)                  return { success: false, error: 'Không tìm thấy lịch đặt' };
   if (lr.UserID !== userID) return { success: false, error: 'Bạn không có quyền huỷ lịch này' };
-  if (lr.Status === 3)    return { success: false, error: 'Lịch đã được huỷ trước đó rồi' };
+  if (lr.Status === 3)      return { success: false, error: 'Lịch đã được huỷ trước đó rồi' };
 
   await execute(`UPDATE LineRoom SET Status=3 WHERE LineRoomID=@id`, { id: parseInt(lineRoomID) });
   return { success: true, title: lr.Title };
 }
 
 // ─── Admin Tools ─────────────────────────────────────────────────────────────
-
 async function getAllBookings({ date, status, limit }) {
-  const conditions = ["lr.Status != 3"];
+  const conditions = ['lr.Status != 3'];
   const params = {};
-
-  if (date) {
-    conditions.push(`date(lr.TimeStart) = @date`);
-    params.date = date;
-  }
+  if (date) { conditions.push(`date(lr.TimeStart) = @date`); params.date = date; }
   if (status !== undefined && status !== null && status !== '') {
-    const statusMap = { 'pending': 0, 'approved': 1, 'rejected': 2, 'cancelled': 3 };
+    const statusMap = { pending: 0, approved: 1, rejected: 2, cancelled: 3 };
     const statusNum = typeof status === 'string' ? (statusMap[status.toLowerCase()] ?? parseInt(status)) : parseInt(status);
     conditions.push(`lr.Status = @status`);
     params.status = statusNum;
-    if (statusNum === 0) conditions.splice(conditions.indexOf("lr.Status != 3"), 1);
+    if (statusNum === 0) conditions.splice(conditions.indexOf('lr.Status != 3'), 1);
   }
-
   const rows = await query(
     `SELECT lr.LineRoomID, lr.Title, lr.TimeStart, lr.TimeEnd, lr.Status, lr.NumberPerson,
             r.RoomName, a.AreaName, u.FullName AS BookedBy, u.UserID
@@ -251,9 +226,7 @@ async function getAllBookings({ date, status, limit }) {
      ORDER BY lr.TimeStart DESC LIMIT @lim`,
     { ...params, lim: parseInt(limit) || 10 }
   );
-
   if (!rows.length) return { found: false, message: 'Không có lịch đặt nào phù hợp.' };
-
   const STATUS = { 0: 'Chờ duyệt', 1: 'Đã duyệt', 2: 'Từ chối', 3: 'Đã huỷ' };
   return {
     found: true,
@@ -272,7 +245,6 @@ async function approveBooking({ lineRoomID, adminID }) {
   const lr = await queryOne(`SELECT Status, Title FROM LineRoom WHERE LineRoomID=@id`, { id: parseInt(lineRoomID) });
   if (!lr) return { success: false, error: 'Không tìm thấy lịch đặt' };
   if (lr.Status !== 0) return { success: false, error: `Lịch "${lr.Title}" không ở trạng thái chờ duyệt` };
-
   await execute(
     `UPDATE LineRoom SET Status=1, ApprovedBy=@adminID, ApprovedAt=datetime('now','localtime') WHERE LineRoomID=@id`,
     { id: parseInt(lineRoomID), adminID }
@@ -284,7 +256,6 @@ async function rejectBooking({ lineRoomID, adminID }) {
   const lr = await queryOne(`SELECT Status, Title FROM LineRoom WHERE LineRoomID=@id`, { id: parseInt(lineRoomID) });
   if (!lr) return { success: false, error: 'Không tìm thấy lịch đặt' };
   if (lr.Status !== 0) return { success: false, error: `Lịch "${lr.Title}" không ở trạng thái chờ duyệt` };
-
   await execute(
     `UPDATE LineRoom SET Status=2, ApprovedBy=@adminID, ApprovedAt=datetime('now','localtime') WHERE LineRoomID=@id`,
     { id: parseInt(lineRoomID), adminID }
@@ -295,17 +266,11 @@ async function rejectBooking({ lineRoomID, adminID }) {
 async function getStatistics({ period }) {
   const pad = n => String(n).padStart(2, '0');
   const now = new Date();
-  const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-
+  const todayStr = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
   let dateFilter = `date(lr.TimeStart) = '${todayStr}'`;
   let label = 'hôm nay';
-  if (period === 'week') {
-    dateFilter = `lr.TimeStart >= datetime('now', '-7 days', 'localtime')`;
-    label = '7 ngày qua';
-  } else if (period === 'month') {
-    dateFilter = `strftime('%Y-%m', lr.TimeStart) = strftime('%Y-%m', datetime('now','localtime'))`;
-    label = 'tháng này';
-  }
+  if (period === 'week')  { dateFilter = `lr.TimeStart >= datetime('now','-7 days','localtime')`; label = '7 ngày qua'; }
+  if (period === 'month') { dateFilter = `strftime('%Y-%m',lr.TimeStart) = strftime('%Y-%m',datetime('now','localtime'))`; label = 'tháng này'; }
 
   const [total] = await query(
     `SELECT COUNT(*) AS total,
@@ -315,117 +280,80 @@ async function getStatistics({ period }) {
             SUM(CASE WHEN Status=3 THEN 1 ELSE 0 END) AS cancelled
      FROM LineRoom lr WHERE ${dateFilter}`, {}
   );
-
   const topRooms = await query(
     `SELECT r.RoomName, COUNT(*) AS bookingCount
      FROM LineRoom lr JOIN Room r ON lr.RoomID = r.RoomID
      WHERE ${dateFilter} AND lr.Status != 3
      GROUP BY r.RoomID ORDER BY bookingCount DESC LIMIT 3`, {}
   );
-
   return {
     period: label,
-    total: total.total || 0,
-    pending: total.pending || 0,
-    approved: total.approved || 0,
-    rejected: total.rejected || 0,
-    cancelled: total.cancelled || 0,
+    total: total.total || 0, pending: total.pending || 0,
+    approved: total.approved || 0, rejected: total.rejected || 0, cancelled: total.cancelled || 0,
     topRooms: topRooms.map(r => ({ name: r.RoomName, count: r.bookingCount })),
   };
 }
 
-// ─── Admin Tool: Thêm phòng ──────────────────────────────────────────────────
 async function addRoomTool({ name, areaName, seat, isVIP, description }) {
   if (!name?.trim()) return { success: false, error: 'Thiếu tên phòng' };
   if (!seat || seat < 1) return { success: false, error: 'Số chỗ ngồi không hợp lệ' };
-
-  // Tìm AreaID từ areaName
   let areaID = null;
   if (areaName) {
-    const area = await queryOne(
-      `SELECT AreaID FROM Area WHERE AreaName LIKE '%' || @name || '%' AND Visible=1 LIMIT 1`,
-      { name: areaName }
-    );
-    if (!area) return { success: false, error: `Không tìm thấy khu vực "${areaName}". Hãy dùng tên chính xác hơn.` };
+    const area = await queryOne(`SELECT AreaID FROM Area WHERE AreaName LIKE '%' || @name || '%' AND Visible=1 LIMIT 1`, { name: areaName });
+    if (!area) return { success: false, error: `Không tìm thấy khu vực "${areaName}".` };
     areaID = area.AreaID;
   } else {
-    const firstArea = await queryOne(`SELECT AreaID FROM Area WHERE Visible=1 LIMIT 1`, {});
-    areaID = firstArea?.AreaID;
+    const first = await queryOne(`SELECT AreaID FROM Area WHERE Visible=1 LIMIT 1`, {});
+    areaID = first?.AreaID;
   }
-
-  const dup = await queryOne(`SELECT RoomID FROM Room WHERE RoomName = @name AND Visible=1`, { name: name.trim() });
+  const dup = await queryOne(`SELECT RoomID FROM Room WHERE RoomName=@name AND Visible=1`, { name: name.trim() });
   if (dup) return { success: false, error: `Phòng tên "${name}" đã tồn tại` };
-
   const result = await execute(
-    `INSERT INTO Room (AreaID, RoomName, Seat, IsVIP, Desc, Visible)
-     VALUES (@areaID, @name, @seat, @isVIP, @desc, 1)`,
+    `INSERT INTO Room (AreaID, RoomName, Seat, IsVIP, Desc, Visible) VALUES (@areaID, @name, @seat, @isVIP, @desc, 1)`,
     { areaID, name: name.trim(), seat: parseInt(seat), isVIP: isVIP ? 1 : 0, desc: description || '' }
   );
-
   const areaRow = await queryOne(`SELECT AreaName FROM Area WHERE AreaID=@id`, { id: areaID });
-  return {
-    success: true, roomID: result.lastInsertRowid,
-    roomName: name.trim(), area: areaRow?.AreaName || '', seat: parseInt(seat),
-    isVIP: !!isVIP,
-  };
+  return { success: true, roomID: result.lastInsertRowid, roomName: name.trim(), area: areaRow?.AreaName || '', seat: parseInt(seat), isVIP: !!isVIP };
 }
 
-// ─── Admin Tool: Xem danh sách phòng ─────────────────────────────────────────
 async function getRoomsTool({ search, areaName, isVIP }) {
   let sql = `SELECT r.RoomID, r.RoomName, r.Seat, r.IsVIP, r.Desc, a.AreaName
-             FROM Room r LEFT JOIN Area a ON r.AreaID = a.AreaID
-             WHERE r.Visible = 1`;
+             FROM Room r LEFT JOIN Area a ON r.AreaID = a.AreaID WHERE r.Visible = 1`;
   const params = {};
-  if (search) { sql += ` AND r.RoomName LIKE '%' || @search || '%'`; params.search = search; }
-  if (areaName) { sql += ` AND a.AreaName LIKE '%' || @area || '%'`; params.area = areaName; }
-  if (isVIP !== undefined && isVIP !== null) { sql += ` AND r.IsVIP = @vip`; params.vip = isVIP ? 1 : 0; }
+  if (search)                                { sql += ` AND r.RoomName LIKE '%' || @search || '%'`; params.search = search; }
+  if (areaName)                              { sql += ` AND a.AreaName LIKE '%' || @area || '%'`;   params.area = areaName; }
+  if (isVIP !== undefined && isVIP !== null) { sql += ` AND r.IsVIP = @vip`;                        params.vip = isVIP ? 1 : 0; }
   sql += ` ORDER BY a.AreaName, r.RoomName LIMIT 20`;
-
   const rooms = await query(sql, params);
   if (!rooms.length) return { found: false, message: 'Không tìm thấy phòng nào phù hợp.' };
   return {
     found: true, total: rooms.length,
-    rooms: rooms.map(r => ({
-      roomID: r.RoomID, name: r.RoomName, area: r.AreaName,
-      seat: r.Seat, isVIP: r.IsVIP === 1, desc: r.Desc || '',
-    })),
+    rooms: rooms.map(r => ({ roomID: r.RoomID, name: r.RoomName, area: r.AreaName, seat: r.Seat, isVIP: r.IsVIP === 1, desc: r.Desc || '' })),
   };
 }
 
-// ─── Admin Tool: Xem thiết bị phòng ──────────────────────────────────────────
 async function getEquipmentTool({ roomName }) {
   if (!roomName?.trim()) return { error: 'Thiếu tên phòng' };
-
   const room = await queryOne(
-    `SELECT r.RoomID, r.RoomName, a.AreaName
-     FROM Room r LEFT JOIN Area a ON r.AreaID = a.AreaID
+    `SELECT r.RoomID, r.RoomName, a.AreaName FROM Room r LEFT JOIN Area a ON r.AreaID = a.AreaID
      WHERE r.RoomName LIKE '%' || @name || '%' AND r.Visible = 1 LIMIT 1`,
     { name: roomName.trim() }
   );
   if (!room) return { found: false, message: `Không tìm thấy phòng "${roomName}"` };
-
   const equipment = await query(
-    `SELECT EquipmentID, Name, Quantity, Note FROM Equipment WHERE RoomID = @roomID AND Visible = 1`,
+    `SELECT EquipmentID, Name, Quantity, Note FROM Equipment WHERE RoomID=@roomID AND Visible=1`,
     { roomID: room.RoomID }
   );
-
-  if (!equipment.length) return {
-    found: true, roomName: room.RoomName, area: room.AreaName,
-    message: `Phòng ${room.RoomName} chưa có thiết bị nào được đăng ký.`,
-    equipment: [],
-  };
-
+  if (!equipment.length) return { found: true, roomName: room.RoomName, area: room.AreaName, message: `Phòng ${room.RoomName} chưa có thiết bị.`, equipment: [] };
   return {
     found: true, roomName: room.RoomName, area: room.AreaName,
     equipment: equipment.map(e => ({ id: e.EquipmentID, name: e.Name, quantity: e.Quantity, note: e.Note || '' })),
   };
 }
 
-// ─── Admin Tool: Xem danh sách người dùng ────────────────────────────────────
 async function getUsersTool({ search, limit }) {
   let sql = `SELECT u.UserID, u.FullName, u.Email, u.Roles, f.FacultyName
-             FROM "User" u LEFT JOIN Faculty f ON u.FacultyID = f.FacultyID
-             WHERE u.Visible = 1`;
+             FROM "User" u LEFT JOIN Faculty f ON u.FacultyID = f.FacultyID WHERE u.Visible = 1`;
   const params = {};
   if (search) {
     sql += ` AND (u.FullName LIKE '%' || @search || '%' OR u.UserID LIKE '%' || @search || '%' OR u.Email LIKE '%' || @search || '%')`;
@@ -433,296 +361,253 @@ async function getUsersTool({ search, limit }) {
   }
   sql += ` ORDER BY u.Roles DESC, u.FullName LIMIT @lim`;
   params.lim = parseInt(limit) || 15;
-
   const users = await query(sql, params);
   if (!users.length) return { found: false, message: 'Không tìm thấy người dùng.' };
-
   return {
     found: true, total: users.length,
-    users: users.map(u => ({
-      userID: u.UserID, name: u.FullName || '', email: u.Email || '',
-      role: u.Roles === 1 ? 'Admin' : 'User', faculty: u.FacultyName || '',
-    })),
+    users: users.map(u => ({ userID: u.UserID, name: u.FullName || '', email: u.Email || '', role: u.Roles === 1 ? 'Admin' : 'User', faculty: u.FacultyName || '' })),
   };
 }
 
-// ─── Tool Schema (OpenAI format) ──────────────────────────────────────────────
-const TOOLS = [
+// ─── Gemini Tool Declarations (function_declarations format, UPPERCASE types) ─
+const USER_TOOL_DECLS = [
   {
-    type: 'function',
-    function: {
-      name: 'search_available_rooms',
-      description: 'Tìm phòng họp còn trống theo thời gian và sức chứa. Gọi khi user muốn tìm phòng. Nếu chưa biết thời lượng, dùng 60 phút để search tạm, nhưng VẪN PHẢI hỏi user thời lượng thực tế sau đó (Bước 4a).',
-      parameters: {
-        type: 'object',
-        properties: {
-          date:            { type: 'string',  description: 'Ngày họp định dạng YYYY-MM-DD' },
-          startTime:       { type: 'string',  description: 'Giờ bắt đầu HH:mm, ví dụ: 14:30' },
-          durationMinutes: { type: 'number',  description: 'Thời lượng phút. "8h đến 10h"=120. Nếu chưa biết, dùng 60 (để tìm phòng tạm thời).' },
-          minSeat:         { type: 'number',  description: 'Số chỗ tối thiểu cần có. Mặc định 1 nếu không biết.' },
-          roomName:        { type: 'string',  description: 'Tên phòng để lọc (tuỳ chọn, chỉ truyền khi user chỉ định cụ thể)' },
-        },
-        required: ['date', 'startTime'],
+    name: 'search_available_rooms',
+    description: 'Tìm phòng họp còn trống theo thời gian và sức chứa. Gọi khi user muốn tìm phòng.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        date:            { type: 'STRING', description: 'Ngày họp YYYY-MM-DD' },
+        startTime:       { type: 'STRING', description: 'Giờ bắt đầu HH:mm, ví dụ: 14:30' },
+        durationMinutes: { type: 'NUMBER', description: 'Thời lượng phút. Nếu chưa biết, dùng 60.' },
+        minSeat:         { type: 'NUMBER', description: 'Số chỗ tối thiểu. Mặc định 1.' },
+        roomName:        { type: 'STRING', description: 'Tên phòng để lọc (chỉ truyền khi user chỉ định)' },
+      },
+      required: ['date', 'startTime'],
+    },
+  },
+  {
+    name: 'book_room',
+    description: 'Đặt phòng vào hệ thống. CHỈ gọi sau khi user đã XÁC NHẬN tóm tắt đặt phòng.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        roomID:          { type: 'NUMBER', description: 'ID phòng từ search_available_rooms' },
+        date:            { type: 'STRING', description: 'Ngày YYYY-MM-DD' },
+        startTime:       { type: 'STRING', description: 'Giờ bắt đầu HH:mm' },
+        durationMinutes: { type: 'NUMBER', description: 'Thời lượng họp (phút). Hỏi user nếu chưa biết.' },
+        title:           { type: 'STRING', description: 'Tiêu đề cuộc họp' },
+        numberPerson:    { type: 'NUMBER', description: 'Số người tham dự' },
+        serviceRequest:  { type: 'STRING', description: 'Yêu cầu dịch vụ thêm nếu user đề cập' },
+      },
+      required: ['roomID', 'date', 'startTime', 'durationMinutes', 'title', 'numberPerson'],
+    },
+  },
+  {
+    name: 'get_my_bookings',
+    description: 'Xem lịch đặt phòng của người dùng.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        period: { type: 'STRING', description: '"upcoming" (sắp tới, mặc định) | "past" (đã qua) | "all" (tất cả)' },
       },
     },
   },
   {
-    type: 'function',
-    function: {
-      name: 'book_room',
-      description: 'Đặt phòng vào hệ thống. CHỈ gọi sau khi user đã XÁC NHẬN tóm tắt đặt phòng.',
-      parameters: {
-        type: 'object',
-        properties: {
-          roomID:          { type: 'number',  description: 'ID phòng lấy từ kết quả search_available_rooms' },
-          date:            { type: 'string',  description: 'Ngày YYYY-MM-DD' },
-          startTime:       { type: 'string',  description: 'Giờ bắt đầu HH:mm' },
-          durationMinutes: { type: 'number',  description: 'Thời lượng họp (phút). BẮT BUỘC phải hỏi user trước khi đặt nếu chưa biết.' },
-          title:           { type: 'string',  description: 'Tiêu đề cuộc họp' },
-          numberPerson:    { type: 'number',  description: 'Số người tham dự' },
-          serviceRequest:  { type: 'string',  description: 'Yêu cầu dịch vụ thêm (máy chiếu, âm thanh, đồ uống...) nếu user có đề cập' },
-        },
-        required: ['roomID', 'date', 'startTime', 'durationMinutes', 'title', 'numberPerson'],
+    name: 'cancel_booking',
+    description: 'Huỷ một lịch đặt phòng theo ID.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        lineRoomID: { type: 'NUMBER', description: 'ID lịch đặt (lấy từ get_my_bookings)' },
+      },
+      required: ['lineRoomID'],
+    },
+  },
+];
+
+const ADMIN_TOOL_DECLS = [
+  {
+    name: 'get_all_bookings',
+    description: 'Admin: Xem tất cả lịch đặt phòng. Lọc theo ngày hoặc trạng thái.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        date:   { type: 'STRING', description: 'Lọc theo ngày YYYY-MM-DD (tuỳ chọn)' },
+        status: { type: 'STRING', description: 'pending | approved | rejected (tuỳ chọn)' },
+        limit:  { type: 'NUMBER', description: 'Số kết quả tối đa. Mặc định 10.' },
       },
     },
   },
   {
-    type: 'function',
-    function: {
-      name: 'get_my_bookings',
-      description: 'Xem lịch đặt phòng của người dùng. Dùng period để lọc: sắp tới, đã qua, hoặc tất cả.',
-      parameters: {
-        type: 'object',
-        properties: {
-          period: {
-            type: 'string',
-            description: 'Khoảng thời gian: "upcoming" (sắp tới, mặc định) | "past" (đã qua, lịch sử) | "all" (tất cả)',
-          },
-        },
-        required: [],
+    name: 'approve_booking',
+    description: 'Admin: Duyệt một lịch đặt VIP đang chờ duyệt.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        lineRoomID: { type: 'NUMBER', description: 'ID lịch đặt cần duyệt' },
+      },
+      required: ['lineRoomID'],
+    },
+  },
+  {
+    name: 'reject_booking',
+    description: 'Admin: Từ chối một lịch đặt VIP đang chờ duyệt.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        lineRoomID: { type: 'NUMBER', description: 'ID lịch đặt cần từ chối' },
+      },
+      required: ['lineRoomID'],
+    },
+  },
+  {
+    name: 'get_statistics',
+    description: 'Admin: Thống kê lịch đặt phòng.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        period: { type: 'STRING', description: 'today | week | month. Mặc định today.' },
       },
     },
   },
   {
-    type: 'function',
-    function: {
-      name: 'cancel_booking',
-      description: 'Huỷ một lịch đặt phòng theo ID.',
-      parameters: {
-        type: 'object',
-        properties: {
-          lineRoomID: { type: 'number', description: 'ID lịch đặt cần huỷ (lấy từ get_my_bookings)' },
-        },
-        required: ['lineRoomID'],
+    name: 'add_room',
+    description: 'Admin: Thêm phòng họp mới. Hỏi xác nhận admin trước khi gọi.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        name:        { type: 'STRING',  description: 'Tên phòng họp' },
+        areaName:    { type: 'STRING',  description: 'Tên khu vực' },
+        seat:        { type: 'NUMBER',  description: 'Số chỗ ngồi tối đa' },
+        isVIP:       { type: 'BOOLEAN', description: 'Phòng VIP yêu cầu phê duyệt?' },
+        description: { type: 'STRING',  description: 'Mô tả phòng (tuỳ chọn)' },
+      },
+      required: ['name', 'seat'],
+    },
+  },
+  {
+    name: 'get_rooms',
+    description: 'Admin: Xem danh sách phòng họp.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        search:   { type: 'STRING',  description: 'Tìm theo tên phòng (tuỳ chọn)' },
+        areaName: { type: 'STRING',  description: 'Lọc theo khu vực (tuỳ chọn)' },
+        isVIP:    { type: 'BOOLEAN', description: 'Chỉ phòng VIP (tuỳ chọn)' },
+      },
+    },
+  },
+  {
+    name: 'get_equipment',
+    description: 'Admin: Xem thiết bị của một phòng họp.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        roomName: { type: 'STRING', description: 'Tên phòng cần xem thiết bị' },
+      },
+      required: ['roomName'],
+    },
+  },
+  {
+    name: 'get_users',
+    description: 'Admin: Xem danh sách người dùng.',
+    parameters: {
+      type: 'OBJECT',
+      properties: {
+        search: { type: 'STRING', description: 'Tìm theo tên, mã số, email (tuỳ chọn)' },
+        limit:  { type: 'NUMBER', description: 'Số kết quả tối đa. Mặc định 15.' },
       },
     },
   },
 ];
 
-// ─── Admin Tool Schema ────────────────────────────────────────────────────────
-const ADMIN_TOOLS = [
-  {
-    type: 'function',
-    function: {
-      name: 'get_all_bookings',
-      description: 'Admin: Xem tất cả lịch đặt phòng của mọi người. Có thể lọc theo ngày hoặc trạng thái.',
-      parameters: {
-        type: 'object',
-        properties: {
-          date:   { type: 'string', description: 'Lọc theo ngày YYYY-MM-DD (tuỳ chọn)' },
-          status: { type: 'string', description: 'Lọc theo trạng thái: pending | approved | rejected (tuỳ chọn)' },
-          limit:  { type: 'number', description: 'Số kết quả tối đa. Mặc định 10.' },
-        },
-        required: [],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'approve_booking',
-      description: 'Admin: Duyệt một lịch đặt phòng VIP đang chờ duyệt (Status = Chờ duyệt).',
-      parameters: {
-        type: 'object',
-        properties: {
-          lineRoomID: { type: 'number', description: 'ID lịch đặt cần duyệt (lấy từ get_all_bookings)' },
-        },
-        required: ['lineRoomID'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'reject_booking',
-      description: 'Admin: Từ chối một lịch đặt phòng VIP đang chờ duyệt.',
-      parameters: {
-        type: 'object',
-        properties: {
-          lineRoomID: { type: 'number', description: 'ID lịch đặt cần từ chối (lấy từ get_all_bookings)' },
-        },
-        required: ['lineRoomID'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'get_statistics',
-      description: 'Admin: Xem thống kê lịch đặt phòng (tổng số, chờ duyệt, top phòng...).',
-      parameters: {
-        type: 'object',
-        properties: {
-          period: { type: 'string', description: 'Khoảng thời gian: today | week | month. Mặc định today.' },
-        },
-        required: [],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'add_room',
-      description: 'Admin: Thêm phòng họp mới vào hệ thống. Hỏi xác nhận admin trước khi gọi.',
-      parameters: {
-        type: 'object',
-        properties: {
-          name:        { type: 'string',  description: 'Tên phòng họp (ví dụ: Phòng họp B305)' },
-          areaName:    { type: 'string',  description: 'Tên khu vực (ví dụ: Khu A, Khu B). Nếu không biết để trống.' },
-          seat:        { type: 'number',  description: 'Số chỗ ngồi tối đa' },
-          isVIP:       { type: 'boolean', description: 'Phòng VIP yêu cầu phê duyệt? Mặc định false.' },
-          description: { type: 'string',  description: 'Mô tả phòng (tuỳ chọn)' },
-        },
-        required: ['name', 'seat'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'get_rooms',
-      description: 'Admin: Xem danh sách phòng họp trong hệ thống, có thể lọc theo tên hoặc khu vực.',
-      parameters: {
-        type: 'object',
-        properties: {
-          search:   { type: 'string',  description: 'Tìm kiếm theo tên phòng (tuỳ chọn)' },
-          areaName: { type: 'string',  description: 'Lọc theo khu vực (tuỳ chọn)' },
-          isVIP:    { type: 'boolean', description: 'Lọc chỉ phòng VIP (tuỳ chọn)' },
-        },
-        required: [],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'get_equipment',
-      description: 'Admin: Xem danh sách thiết bị của một phòng họp cụ thể (máy chiếu, điều hòa, bảng, micro...).',
-      parameters: {
-        type: 'object',
-        properties: {
-          roomName: { type: 'string', description: 'Tên phòng cần xem thiết bị (ví dụ: A101, Phòng họp B)' },
-        },
-        required: ['roomName'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'get_users',
-      description: 'Admin: Xem danh sách người dùng trong hệ thống. Có thể tìm kiếm theo tên, mã số hoặc email.',
-      parameters: {
-        type: 'object',
-        properties: {
-          search: { type: 'string', description: 'Từ khoá tìm kiếm: tên, mã số, email (tuỳ chọn)' },
-          limit:  { type: 'number', description: 'Số kết quả tối đa. Mặc định 15.' },
-        },
-        required: [],
-      },
-    },
-  },
-];
+// ─── Gemini REST API call ──────────────────────────────────────────────────────
+async function callGemini(contents, systemPrompt, toolDecls) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    const e = new Error('GEMINI_API_KEY not set'); e.status = 503; throw e;
+  }
 
-// ─── Helper: sleep ────────────────────────────────────────────────────────────
-const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const body = {
+    system_instruction: { parts: [{ text: systemPrompt }] },
+    contents,
+    generation_config: { temperature: 0.2, maxOutputTokens: 1200 },
+  };
+
+  if (toolDecls?.length) {
+    body.tools = [{ function_declarations: toolDecls }];
+    body.tool_config = { function_calling_config: { mode: 'AUTO' } };
+  }
+
+  const resp = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  const data = await resp.json();
+  if (!resp.ok) {
+    const msg = data?.error?.message || resp.statusText;
+    const e = new Error(msg); e.status = resp.status; throw e;
+  }
+  return data;
+}
 
 // ─── ReAct loop ───────────────────────────────────────────────────────────────
-async function runAI({ messages, systemPrompt, userID, tools }) {
-  const groq = getGroq();
-  const all = [{ role: 'system', content: systemPrompt }, ...messages];
-  let bookingResult = null;
-  let pendingData = null;
+// Messages stored in Gemini format: { role: 'user'|'model', parts: [...] }
+async function runAI({ messages, systemPrompt, userID, toolDecls }) {
+  const contents      = [...messages];
+  let bookingResult   = null;
+  let pendingData     = null;
 
   for (let i = 0; i < 6; i++) {
-    let resp;
+    let data;
     try {
-      // Thử model chính (70b) trước, nếu rate-limit thì fallback sang 8b
-      let lastErr;
-      for (const [modelName, delayMs] of [
-        [MODEL_PRIMARY,  0],
-        [MODEL_FALLBACK, 1500],
-      ]) {
-        if (delayMs) await sleep(delayMs);
-        try {
-          resp = await groq.chat.completions.create({
-            model: modelName,
-            messages: all,
-            tools,
-            tool_choice: 'auto',
-            max_tokens: 1200,
-            temperature: 0.2,
-          });
-          lastErr = null;
-          break; // thành công → thoát vòng retry
-        } catch (e) {
-          lastErr = e;
-          const isRateLimit = e.status === 429 || e.message?.includes('rate limit') || e.message?.includes('Rate limit');
-          if (!isRateLimit) break; // lỗi khác → không retry
-          console.warn(`[Chat] Rate limit on ${modelName}, retrying with fallback...`);
-        }
-      }
-      if (lastErr) throw lastErr;
+      data = await callGemini(contents, systemPrompt, toolDecls);
     } catch (apiErr) {
-      console.error('[Chat] Groq API error in loop:', apiErr.message?.slice(0, 120));
-      const isRateLimit   = apiErr.status === 429 || apiErr.message?.includes('rate limit');
-      const isFuncFail    = apiErr.message?.includes('failed_generation') || apiErr.message?.includes('Failed to call a function');
-      const isToolFmt     = apiErr.message?.includes('tool call validation failed');
+      console.error('[Chat] Gemini API error:', apiErr.message?.slice(0, 200));
+      const isRateLimit = apiErr.status === 429 || apiErr.message?.includes('RESOURCE_EXHAUSTED') || apiErr.message?.includes('quota');
       return {
-        reply: (isRateLimit || isFuncFail)
+        reply: isRateLimit
           ? 'AI đang quá tải, vui lòng thử lại sau vài giây ⏳'
-          : isToolFmt
-            ? 'Tôi chưa hiểu rõ yêu cầu. Bạn có thể thử diễn đạt lại không?'
-            : 'AI gặp lỗi tạm thời, vui lòng thử lại.',
-        bookingResult, pendingData, history: all.slice(1),
+          : 'AI gặp lỗi tạm thời, vui lòng thử lại.',
+        bookingResult, pendingData, history: contents,
       };
     }
 
-    const msg = resp.choices[0].message;
+    const candidate = data.candidates?.[0];
+    const content   = candidate?.content;
 
-    // Normalize — không push tool_calls: null (gây lỗi Groq ở turn tiếp theo)
-    const norm = { role: msg.role, content: msg.content ?? '' };
-    if (msg.tool_calls?.length) norm.tool_calls = msg.tool_calls;
-    all.push(norm);
-
-    // Không có tool call → AI đã trả lời xong
-    if (!msg.tool_calls?.length) {
-      return { reply: msg.content || '', bookingResult, pendingData, history: all.slice(1) };
+    if (!content) {
+      const reason = candidate?.finishReason;
+      return {
+        reply: reason === 'SAFETY'
+          ? 'Tôi không thể trả lời câu hỏi đó.'
+          : 'AI gặp lỗi tạm thời, vui lòng thử lại.',
+        bookingResult, pendingData, history: contents,
+      };
     }
 
-    // Thực thi từng tool
-    for (const tc of msg.tool_calls) {
-      let args = {};
-      try {
-        const parsed = JSON.parse(tc.function.arguments);
-        if (parsed !== null && typeof parsed === 'object') args = parsed;
-      } catch (_) {}
+    contents.push(content); // Add model turn to history
 
+    const funcCallParts = (content.parts || []).filter(p => p.functionCall);
+
+    if (!funcCallParts.length) {
+      const text = (content.parts || []).filter(p => p.text).map(p => p.text).join('');
+      return { reply: text, bookingResult, pendingData, history: contents };
+    }
+
+    // Execute tools — collect all responses in one user turn
+    const responseParts = [];
+    for (const part of funcCallParts) {
+      const { name, args } = part.functionCall;
       let result;
-      switch (tc.function.name) {
+
+      switch (name) {
         case 'search_available_rooms': result = await searchAvailableRooms(args); break;
         case 'book_room':              result = await bookRoom({ ...args, userID }); break;
-        case 'get_my_bookings':        result = await getMyBookings({ userID }); break;
+        case 'get_my_bookings':        result = await getMyBookings({ ...args, userID }); break;
         case 'cancel_booking':         result = await cancelBooking({ ...args, userID }); break;
         case 'get_all_bookings':       result = await getAllBookings(args); break;
         case 'approve_booking':        result = await approveBooking({ ...args, adminID: userID }); break;
@@ -736,22 +621,24 @@ async function runAI({ messages, systemPrompt, userID, tools }) {
       }
 
       if (result?.success === true && result?.lineRoomID) bookingResult = result;
-      // Track pending bookings for admin inline action cards
-      if (tc.function.name === 'get_all_bookings' && result?.found) {
+      if (name === 'get_all_bookings' && result?.found) {
         const pending = result.bookings?.filter(b => b.status === 'Chờ duyệt');
         if (pending?.length) pendingData = pending;
       }
-      all.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(result) });
+
+      responseParts.push({ functionResponse: { name, response: result } });
     }
+
+    contents.push({ role: 'user', parts: responseParts });
   }
 
-  return { reply: '', bookingResult, pendingData, history: all.slice(1) };
+  return { reply: '', bookingResult, pendingData, history: contents };
 }
 
 // ─── Main Handler ─────────────────────────────────────────────────────────────
 const sendMessage = async (req, res) => {
   try {
-    if (!getGroq()) return error(res, 'GROQ_API_KEY chưa cấu hình trong .env', 503);
+    if (!process.env.GEMINI_API_KEY) return error(res, 'GEMINI_API_KEY chưa cấu hình trong .env', 503);
 
     const { message } = req.body;
     if (!message?.trim()) return badRequest(res, 'Thiếu nội dung tin nhắn');
@@ -760,14 +647,12 @@ const sendMessage = async (req, res) => {
     const userName = req.user?.fullName || 'Bạn';
     const isAdmin  = req.user?.roles === 1;
 
-    // Xây date strings dùng local time (KHÔNG dùng toISOString → UTC sai 7 tiếng)
     const now  = new Date();
     const pad  = n => String(n).padStart(2, '0');
-    const fmt  = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const fmt  = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
     const t1   = new Date(now); t1.setDate(now.getDate() + 1);
     const t2   = new Date(now); t2.setDate(now.getDate() + 2);
-    const t3   = new Date(now); t3.setDate(now.getDate() + 3);
-    const days = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'];
+    const days = ['Chủ nhật','Thứ 2','Thứ 3','Thứ 4','Thứ 5','Thứ 6','Thứ 7'];
 
     const userSystemPrompt = `Bạn là AI Booking Assistant — trợ lý đặt phòng họp của hệ thống AMIS Meeting Room.
 Hôm nay: ${fmt(now)} (${days[now.getDay()]}) ${pad(now.getHours())}:${pad(now.getMinutes())} | Ngày mai: ${fmt(t1)} | Người dùng: ${userName} (${userID})
@@ -813,21 +698,19 @@ NGƯỜI DÙNG: "danh sách user/tìm [tên]" → get_users
 
 Trả lời ngắn gọn, tiếng Việt, emoji vừa phải. Ngoài chủ đề: "Tôi chỉ hỗ trợ quản lý phòng họp ạ."`;
 
-
     const systemPrompt = isAdmin ? adminSystemPrompt : userSystemPrompt;
-    const tools    = isAdmin ? [...TOOLS, ...ADMIN_TOOLS] : TOOLS;
+    const toolDecls    = isAdmin ? [...USER_TOOL_DECLS, ...ADMIN_TOOL_DECLS] : USER_TOOL_DECLS;
 
     const session  = getSession(userID);
-    const messages = [...session.messages, { role: 'user', content: message }];
+    // New user message in Gemini format
+    const messages = [...session.messages, { role: 'user', parts: [{ text: message }] }];
 
-    const { reply, bookingResult, pendingData, history } = await runAI({ messages, systemPrompt, userID, tools });
+    const { reply, bookingResult, pendingData, history } = await runAI({ messages, systemPrompt, userID, toolDecls });
 
     const isBookingSuccess = !!(bookingResult?.success && bookingResult?.lineRoomID);
     const finalReply = reply || 'Xin lỗi, tôi chưa hiểu rõ yêu cầu. Bạn có thể nói rõ hơn không?';
 
-    // Lưu toàn bộ history kể cả function call để turn sau có đủ context
-    const saved = reply ? history : [...history, { role: 'assistant', content: finalReply }];
-    session.messages = saved.length > 40 ? saved.slice(-40) : saved;
+    session.messages = history.length > 40 ? history.slice(-40) : history;
 
     try {
       await execute(
@@ -846,14 +729,11 @@ Trả lời ngắn gọn, tiếng Việt, emoji vừa phải. Ngoài chủ đề
 
   } catch (err) {
     console.error('[Chat] Error:', err.message);
-    // Không expose raw Groq/JS errors ra client
     const raw = err.message || '';
     let msg = 'AI đang gặp sự cố, vui lòng thử lại.';
-    if (raw.includes('tool call validation failed') || raw.includes('invalid_request_error')) {
-      msg = 'AI không thể xử lý yêu cầu theo cách này. Vui lòng thử diễn đạt khác.';
-    } else if (raw.includes('rate limit') || raw.includes('quota') || raw.includes('failed_generation') || raw.includes('Failed to call a function') || err.status === 429) {
+    if (raw.includes('RESOURCE_EXHAUSTED') || raw.includes('quota') || err.status === 429) {
       msg = 'AI đang quá tải, vui lòng thử lại sau vài giây ⏳';
-    } else if (raw.includes('GROQ_API_KEY') || raw.includes('API key')) {
+    } else if (raw.includes('GEMINI_API_KEY') || raw.includes('API key')) {
       msg = 'Chưa cấu hình API key AI.';
     }
     return error(res, msg, 500);
@@ -868,11 +748,8 @@ const getHistory = async (req, res) => {
     if (!userID) return error(res, 'Chưa xác thực', 401);
     const limit = Math.min(parseInt(req.query.limit) || 50, 200);
     const rows = await query(
-      `SELECT LogID, UserMessage, BotReply, CreateDate
-       FROM AI_Chat_Log
-       WHERE UserID = @userID
-       ORDER BY CreateDate DESC
-       LIMIT @limit`,
+      `SELECT LogID, UserMessage, BotReply, CreateDate FROM AI_Chat_Log
+       WHERE UserID = @userID ORDER BY CreateDate DESC LIMIT @limit`,
       { userID, limit }
     );
     return success(res, rows);
