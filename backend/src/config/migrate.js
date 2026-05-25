@@ -189,5 +189,27 @@ seedRoles.run('Người quản lý đặt phòng', 'Có quyền sửa, xóa, ph�
 seedRoles.run('Người đặt phòng',       'Có quyền cập nhật đặt phòng của chính mình');
 console.log('  ✅ Role table ready');
 
+// ─── Migration 11b: LineRoom.ReminderSent ────────────────────────────────────
+console.log('\n[11b] LineRoom.ReminderSent column');
+addColumnIfNotExists('LineRoom', 'ReminderSent', 'INTEGER DEFAULT 0');
+
+// ─── Migration 11: UserRole table ─────────────────────────────────────────────
+console.log('\n[11] UserRole table');
+db.exec(`
+  CREATE TABLE IF NOT EXISTS "UserRole" (
+    UserRoleID  INTEGER PRIMARY KEY AUTOINCREMENT,
+    UserID      TEXT    NOT NULL REFERENCES "User"(UserID) ON DELETE CASCADE,
+    RoleID      INTEGER NOT NULL REFERENCES "Role"(RoleID) ON DELETE CASCADE,
+    AssignedAt  TEXT    DEFAULT (datetime('now','localtime')),
+    UNIQUE(UserID, RoleID)
+  );
+`);
+// Gán admin vào vai trò "Quản trị ứng dụng"
+const adminRoleRow = db.prepare(`SELECT RoleID FROM "Role" WHERE Name = 'Quản trị ứng dụng'`).get();
+if (adminRoleRow) {
+  db.prepare(`INSERT OR IGNORE INTO "UserRole" (UserID, RoleID) VALUES (?, ?)`).run('admin', adminRoleRow.RoleID);
+}
+console.log('  ✅ UserRole table ready');
+
 db.close();
 console.log('\n🎉 All migrations completed!');
