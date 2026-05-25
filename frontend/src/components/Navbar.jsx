@@ -74,7 +74,7 @@ const Navbar = () => {
       <div className="navbar-inner">
         {/* Logo */}
         <div className="navbar-logo" onClick={() => { navigate('/'); closeMobile() }}>
-          <i className="fa fa-building" style={{ fontSize: '1.4rem' }} />
+          <img src="/logo.png" alt="logo" style={{ width: 32, height: 32, objectFit: 'contain' }} />
           <span>Meeting Booking</span>
         </div>
 

@@ -341,7 +341,7 @@ const AdminChatbotWidget = () => {
           zIndex: 1200, transition: 'all 0.2s ease',
         }}
       >
-        <i className={`fa ${open ? 'fa-times' : 'fa-robot'}`} />
+        {open ? <i className="fa fa-times" /> : <img src="/chatbot-avatar.png" alt="bot" style={{ width: 32, height: 32, objectFit: 'contain' }} />}
       </button>
 
       {open && (
@@ -365,7 +365,7 @@ const AdminChatbotWidget = () => {
                 background: 'rgba(255,255,255,0.2)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
-                <i className="fa fa-robot" style={{ color: '#fff', fontSize: '1rem' }} />
+                <img src="/chatbot-avatar.png" alt="bot" style={{ width: 22, height: 22, objectFit: 'contain' }} />
               </div>
               <div>
                 <div style={{ color: '#fff', fontWeight: 700, fontSize: '0.9rem', lineHeight: 1.2 }}>

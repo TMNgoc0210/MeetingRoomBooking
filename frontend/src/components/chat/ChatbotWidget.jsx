@@ -233,7 +233,7 @@ const ChatbotWidget = () => {
   return (
     <>
       <button className="chatbot-fab" onClick={() => setOpen(v => !v)} title="AI Chatbot">
-        <i className={`fa ${open ? 'fa-times' : 'fa-robot'}`} />
+        {open ? <i className="fa fa-times" /> : <img src="/chatbot-avatar.png" alt="bot" style={{ width: 32, height: 32, objectFit: 'contain' }} />}
       </button>
 
       {open && (
@@ -241,7 +241,7 @@ const ChatbotWidget = () => {
           {/* Header */}
           <div className="chat-header">
             <div className="chat-header-info">
-              <div className="chat-avatar"><i className="fa fa-robot" /></div>
+              <div className="chat-avatar"><img src="/chatbot-avatar.png" alt="bot" style={{ width: '100%', height: '100%', objectFit: 'contain' }} /></div>
               <div>
                 <div className="chat-name">AI Booking Assistant</div>
                 <div className="chat-status">● Trực tuyến</div>
