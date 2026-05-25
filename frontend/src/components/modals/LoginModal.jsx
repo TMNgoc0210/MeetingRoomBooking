@@ -38,6 +38,13 @@ const LoginModal = () => {
   const { setAuth } = useAuthStore()
   const [tab, setTab] = useState('login')
   const [faculties, setFaculties] = useState([])
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 600)
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= 600)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
 
   const [loginForm, setLoginForm] = useState({ username: '', password: '' })
   const [showLoginPwd, setShowLoginPwd] = useState(false)
@@ -102,22 +109,23 @@ const LoginModal = () => {
   const pwdMismatch = regForm.confirmPassword && regForm.password !== regForm.confirmPassword
 
   return (
-    <div className="modal-overlay" onClick={closeLoginModal}>
+    <div className="modal-overlay" onClick={closeLoginModal} style={{ alignItems: isMobile ? 'center' : 'center', padding: isMobile ? '0' : '1rem' }}>
       <div onClick={e => e.stopPropagation()} style={{
-        display: 'flex', borderRadius: 18, overflow: 'hidden',
-        width: tab === 'register' ? 640 : 520,
-        maxWidth: '95vw', maxHeight: '90vh',
+        display: 'flex', borderRadius: isMobile ? 14 : 18, overflow: 'hidden',
+        width: isMobile ? '100%' : (tab === 'register' ? 640 : 520),
+        maxWidth: isMobile ? '100vw' : '95vw',
+        maxHeight: isMobile ? '100dvh' : '90vh',
         background: 'var(--bg-secondary)',
         boxShadow: '0 24px 64px rgba(0,0,0,0.55)',
         transition: 'width 0.3s ease',
       }}>
 
-        {/* ── Left branding panel ── */}
+        {/* ── Left branding panel — ẩn trên mobile ── */}
         <div style={{
           width: 200, flexShrink: 0,
           background: 'linear-gradient(160deg, #c9a96e 0%, #7a5a1e 55%, #3d2c0a 100%)',
           padding: '2rem 1.5rem',
-          display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+          display: isMobile ? 'none' : 'flex', flexDirection: 'column', justifyContent: 'space-between',
           position: 'relative', overflow: 'hidden',
         }}>
           {/* Decorative circles */}
@@ -170,7 +178,7 @@ const LoginModal = () => {
         {/* ── Right form panel ── */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           {/* Header */}
-          <div style={{ padding: '1.5rem 1.75rem 0', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexShrink: 0 }}>
+          <div style={{ padding: isMobile ? '1.25rem 1.25rem 0' : '1.5rem 1.75rem 0', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexShrink: 0 }}>
             <div>
               <div style={{ fontWeight: 800, fontSize: '1.15rem', color: 'var(--text-primary)', marginBottom: 3 }}>
                 {tab === 'login' ? 'Chào mừng trở lại 👋' : 'Tạo tài khoản mới'}
@@ -185,7 +193,7 @@ const LoginModal = () => {
           </div>
 
           {/* Tab switcher */}
-          <div style={{ padding: '1rem 1.75rem 0', flexShrink: 0 }}>
+          <div style={{ padding: isMobile ? '0.75rem 1.25rem 0' : '1rem 1.75rem 0', flexShrink: 0 }}>
             <div style={{ display: 'flex', background: 'var(--bg-primary)', borderRadius: 10, padding: 3 }}>
               {[
                 { key: 'login', label: 'Đăng nhập', icon: 'fa-sign-in-alt' },
@@ -205,7 +213,7 @@ const LoginModal = () => {
           </div>
 
           {/* Form area */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '1.25rem 1.75rem 0' }}>
+          <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '1rem 1.25rem 0' : '1.25rem 1.75rem 0' }}>
 
             {/* ── Login form ── */}
             {tab === 'login' && (
@@ -252,7 +260,7 @@ const LoginModal = () => {
             {/* ── Register form ── */}
             {tab === 'register' && (
               <form onSubmit={handleRegister}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 1rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '0 1rem' }}>
                   <Field label="Tên đăng nhập" required icon="fa-at"
                     hint="Chữ, số, dấu chấm, gạch dưới">
                     <input className="form-control" style={{ ...inputStyle(true) }}
@@ -275,7 +283,7 @@ const LoginModal = () => {
                   </Field>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 1rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '0 1rem' }}>
                   <Field label="Email" icon="fa-envelope">
                     <input type="email" className="form-control" style={{ ...inputStyle(true) }}
                       placeholder="email@example.com"
@@ -308,7 +316,7 @@ const LoginModal = () => {
                   </select>
                 </Field>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 1rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '0 1rem' }}>
                   <Field label="Mật khẩu" required icon="fa-lock" hint="Ít nhất 6 ký tự">
                     <input type={showRegPwd ? 'text' : 'password'} className="form-control"
                       style={{ ...inputStyle(true), paddingRight: 36 }}
@@ -351,7 +359,7 @@ const LoginModal = () => {
           </div>
 
           {/* Footer switch link */}
-          <div style={{ padding: '0.75rem 1.75rem 1.25rem', textAlign: 'center', flexShrink: 0 }}>
+          <div style={{ padding: isMobile ? '0.75rem 1.25rem 1.25rem' : '0.75rem 1.75rem 1.25rem', textAlign: 'center', flexShrink: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
               <div style={{ height: 1, flex: 1, background: 'var(--border)' }} />
               <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>

@@ -12,7 +12,16 @@ require('./config/db');
 const app = express();
 
 // ─── Security ────────────────────────────────────────────────
-app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  contentSecurityPolicy: {
+    directives: {
+      ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+      // Cho phép tải ảnh từ external domain (picsum.photos, placehold.co, etc.)
+      'img-src': ["'self'", 'data:', 'blob:', 'https:'],
+    },
+  },
+}));
 
 // ─── CORS ─────────────────────────────────────────────────────
 app.use(
