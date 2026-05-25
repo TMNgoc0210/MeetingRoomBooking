@@ -3,11 +3,18 @@
  * 1M TPM / 1500 RPD free tier — function calling native support
  */
 
+const Groq = require('groq-sdk');
 const { query, queryOne, execute } = require('../config/db');
 const { success, error, badRequest } = require('../utils/response');
 
-const GEMINI_MODEL = 'gemini-2.0-flash';
-const GEMINI_URL   = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+let _groq = null;
+function getGroq() {
+  if (!_groq && process.env.GROQ_API_KEY) _groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+  return _groq;
+}
+
+// Groq: llama-3.3-70b-versatile — 6k TPM / 14,400 RPD, best function calling on free tier
+const GROQ_MODEL = 'llama-3.3-70b-versatile';
 
 // ─── Server-side session memory ───────────────────────────────────────────────
 const sessionStore = new Map();
@@ -522,89 +529,72 @@ const ADMIN_TOOL_DECLS = [
   },
 ];
 
-// ─── Gemini REST API call ──────────────────────────────────────────────────────
-async function callGemini(contents, systemPrompt, toolDecls) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    const e = new Error('GEMINI_API_KEY not set'); e.status = 503; throw e;
-  }
-
-  const body = {
-    system_instruction: { parts: [{ text: systemPrompt }] },
-    contents,
-    generation_config: { temperature: 0.2, maxOutputTokens: 1200 },
-  };
-
-  if (toolDecls?.length) {
-    body.tools = [{ function_declarations: toolDecls }];
-    body.tool_config = { function_calling_config: { mode: 'AUTO' } };
-  }
-
-  const resp = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-
-  const data = await resp.json();
-  if (!resp.ok) {
-    const msg = data?.error?.message || resp.statusText;
-    const e = new Error(msg); e.status = resp.status; throw e;
-  }
-  return data;
+// ─── Groq Tool Schema (OpenAI format) ────────────────────────────────────────
+// Convert USER_TOOL_DECLS / ADMIN_TOOL_DECLS → OpenAI tools format for Groq
+function toGroqTools(decls) {
+  return decls.map(d => ({
+    type: 'function',
+    function: {
+      name: d.name,
+      description: d.description,
+      parameters: {
+        ...d.parameters,
+        type: d.parameters.type.toLowerCase(),
+        properties: Object.fromEntries(
+          Object.entries(d.parameters.properties || {}).map(([k, v]) => [
+            k, { ...v, type: v.type.toLowerCase() },
+          ])
+        ),
+      },
+    },
+  }));
 }
 
-// ─── ReAct loop ───────────────────────────────────────────────────────────────
-// Messages stored in Gemini format: { role: 'user'|'model', parts: [...] }
+// ─── ReAct loop (Groq) ────────────────────────────────────────────────────────
 async function runAI({ messages, systemPrompt, userID, toolDecls }) {
-  const contents      = [...messages];
-  let bookingResult   = null;
-  let pendingData     = null;
+  const groq = getGroq();
+  const all  = [{ role: 'system', content: systemPrompt }, ...messages];
+  const tools = toGroqTools(toolDecls);
+  let bookingResult = null;
+  let pendingData   = null;
 
   for (let i = 0; i < 6; i++) {
-    let data;
+    let resp;
     try {
-      data = await callGemini(contents, systemPrompt, toolDecls);
+      resp = await groq.chat.completions.create({
+        model: GROQ_MODEL,
+        messages: all,
+        tools,
+        tool_choice: 'auto',
+        max_tokens: 1200,
+        temperature: 0.2,
+      });
     } catch (apiErr) {
-      console.error('[Chat] Gemini API error:', apiErr.message?.slice(0, 200));
-      const isRateLimit = apiErr.status === 429 || apiErr.message?.includes('RESOURCE_EXHAUSTED') || apiErr.message?.includes('quota');
+      console.error('[Chat] Groq API error:', apiErr.message?.slice(0, 200));
+      const isRateLimit = apiErr.status === 429 || apiErr.message?.includes('rate limit') || apiErr.message?.includes('Rate limit');
       return {
         reply: isRateLimit
           ? 'AI đang quá tải, vui lòng thử lại sau vài giây ⏳'
           : 'AI gặp lỗi tạm thời, vui lòng thử lại.',
-        bookingResult, pendingData, history: contents,
+        bookingResult, pendingData, history: all.slice(1),
       };
     }
 
-    const candidate = data.candidates?.[0];
-    const content   = candidate?.content;
+    const msg  = resp.choices[0].message;
+    const norm = { role: msg.role, content: msg.content ?? '' };
+    if (msg.tool_calls?.length) norm.tool_calls = msg.tool_calls;
+    all.push(norm);
 
-    if (!content) {
-      const reason = candidate?.finishReason;
-      return {
-        reply: reason === 'SAFETY'
-          ? 'Tôi không thể trả lời câu hỏi đó.'
-          : 'AI gặp lỗi tạm thời, vui lòng thử lại.',
-        bookingResult, pendingData, history: contents,
-      };
+    if (!msg.tool_calls?.length) {
+      return { reply: msg.content || '', bookingResult, pendingData, history: all.slice(1) };
     }
 
-    contents.push(content); // Add model turn to history
+    for (const tc of msg.tool_calls) {
+      let args = {};
+      try { const p = JSON.parse(tc.function.arguments); if (p && typeof p === 'object') args = p; } catch (_) {}
 
-    const funcCallParts = (content.parts || []).filter(p => p.functionCall);
-
-    if (!funcCallParts.length) {
-      const text = (content.parts || []).filter(p => p.text).map(p => p.text).join('');
-      return { reply: text, bookingResult, pendingData, history: contents };
-    }
-
-    // Execute tools — collect all responses in one user turn
-    const responseParts = [];
-    for (const part of funcCallParts) {
-      const { name, args } = part.functionCall;
       let result;
-
-      switch (name) {
+      switch (tc.function.name) {
         case 'search_available_rooms': result = await searchAvailableRooms(args); break;
         case 'book_room':              result = await bookRoom({ ...args, userID }); break;
         case 'get_my_bookings':        result = await getMyBookings({ ...args, userID }); break;
@@ -621,24 +611,21 @@ async function runAI({ messages, systemPrompt, userID, toolDecls }) {
       }
 
       if (result?.success === true && result?.lineRoomID) bookingResult = result;
-      if (name === 'get_all_bookings' && result?.found) {
+      if (tc.function.name === 'get_all_bookings' && result?.found) {
         const pending = result.bookings?.filter(b => b.status === 'Chờ duyệt');
         if (pending?.length) pendingData = pending;
       }
-
-      responseParts.push({ functionResponse: { name, response: result } });
+      all.push({ role: 'tool', tool_call_id: tc.id, content: JSON.stringify(result) });
     }
-
-    contents.push({ role: 'user', parts: responseParts });
   }
 
-  return { reply: '', bookingResult, pendingData, history: contents };
+  return { reply: '', bookingResult, pendingData, history: all.slice(1) };
 }
 
 // ─── Main Handler ─────────────────────────────────────────────────────────────
 const sendMessage = async (req, res) => {
   try {
-    if (!process.env.GEMINI_API_KEY) return error(res, 'GEMINI_API_KEY chưa cấu hình trong .env', 503);
+    if (!getGroq()) return error(res, 'GROQ_API_KEY chưa cấu hình trong .env', 503);
 
     const { message } = req.body;
     if (!message?.trim()) return badRequest(res, 'Thiếu nội dung tin nhắn');
@@ -699,11 +686,10 @@ NGƯỜI DÙNG: "danh sách user/tìm [tên]" → get_users
 Trả lời ngắn gọn, tiếng Việt, emoji vừa phải. Ngoài chủ đề: "Tôi chỉ hỗ trợ quản lý phòng họp ạ."`;
 
     const systemPrompt = isAdmin ? adminSystemPrompt : userSystemPrompt;
-    const toolDecls    = isAdmin ? [...USER_TOOL_DECLS, ...ADMIN_TOOL_DECLS] : USER_TOOL_DECLS;
+    const toolDecls = isAdmin ? [...USER_TOOL_DECLS, ...ADMIN_TOOL_DECLS] : USER_TOOL_DECLS;
 
     const session  = getSession(userID);
-    // New user message in Gemini format
-    const messages = [...session.messages, { role: 'user', parts: [{ text: message }] }];
+    const messages = [...session.messages, { role: 'user', content: message }];
 
     const { reply, bookingResult, pendingData, history } = await runAI({ messages, systemPrompt, userID, toolDecls });
 
@@ -731,9 +717,9 @@ Trả lời ngắn gọn, tiếng Việt, emoji vừa phải. Ngoài chủ đề
     console.error('[Chat] Error:', err.message);
     const raw = err.message || '';
     let msg = 'AI đang gặp sự cố, vui lòng thử lại.';
-    if (raw.includes('RESOURCE_EXHAUSTED') || raw.includes('quota') || err.status === 429) {
+    if (raw.includes('rate limit') || raw.includes('Rate limit') || err.status === 429) {
       msg = 'AI đang quá tải, vui lòng thử lại sau vài giây ⏳';
-    } else if (raw.includes('GEMINI_API_KEY') || raw.includes('API key')) {
+    } else if (raw.includes('GROQ_API_KEY') || raw.includes('API key')) {
       msg = 'Chưa cấu hình API key AI.';
     }
     return error(res, msg, 500);
