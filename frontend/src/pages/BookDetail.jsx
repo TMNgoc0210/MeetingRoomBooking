@@ -12,8 +12,15 @@ const BookDetail = () => {
   const [bookings, setBookings] = useState([])
   const [equipment, setEquipment] = useState([])
   const [loading, setLoading] = useState(true)
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768)
   const { openBookingModal, openLoginModal, refreshKey } = useUIStore()
   const { user } = useAuthStore()
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= 768)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
 
   useEffect(() => {
     setLoading(true)
@@ -45,7 +52,7 @@ const BookDetail = () => {
           <i className="fa fa-arrow-left" /> Quay lại
         </button>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '340px 1fr', gap: '2rem', alignItems: 'start' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '340px 1fr', gap: isMobile ? '1.25rem' : '2rem', alignItems: 'start' }}>
           {/* Room Info Panel */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div className="card" style={{ padding: 0, overflow: 'hidden' }}>

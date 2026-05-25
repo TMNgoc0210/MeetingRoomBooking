@@ -147,6 +147,21 @@ const UserModal = () => {
                   <InfoRow icon="envelope" label="Email" value={data.Email} />
                   <InfoRow icon="phone" label="SĐT" value={data.Mobi} />
                   <InfoRow icon="university" label="Khoa" value={data.FacultyName} />
+                  {data.assignedRoles?.length > 0 && (
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', fontSize: '0.875rem' }}>
+                      <i className="fa fa-id-badge" style={{ width: 16, color: 'var(--accent)', flexShrink: 0, marginTop: 2 }} />
+                      <span style={{ color: 'var(--text-muted)', minWidth: 60 }}>Vai trò:</span>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                        {data.assignedRoles.map(r => (
+                          <span key={r.RoleID} style={{
+                            fontSize: '0.75rem', padding: '2px 8px', borderRadius: 10,
+                            background: 'rgba(201,169,110,0.15)', color: 'var(--accent)',
+                            border: '1px solid var(--accent)',
+                          }}>{r.Name}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {canEdit && (

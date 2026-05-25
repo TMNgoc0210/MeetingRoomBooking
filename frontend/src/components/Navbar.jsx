@@ -12,7 +12,6 @@ const PendingBadge = () => {
 
   useEffect(() => {
     if (!accessToken) return
-    // _silent: true → interceptor KHÔNG redirect khi 401, tránh reload loop
     import('../services/api').then(({ default: api }) => {
       api.get('/bookings/pending', { _silent: true })
         .then(r => setCount((r.data.data || []).length))
@@ -34,7 +33,9 @@ const Navbar = () => {
   const admin = useAuthStore(s => s.user?.Roles === 1)
   const { openLoginModal, openRegisterModal, openChangePassModal, openUserModal, theme, toggleTheme } = useUIStore()
   const [dropdownOpen, setDropdownOpen] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const dropRef = useRef(null)
+  const mobileRef = useRef(null)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -42,10 +43,18 @@ const Navbar = () => {
       if (dropRef.current && !dropRef.current.contains(e.target)) {
         setDropdownOpen(false)
       }
+      if (mobileRef.current && !mobileRef.current.contains(e.target)) {
+        setMobileMenuOpen(false)
+      }
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [])
+
+  // Close mobile menu on route change
+  useEffect(() => {
+    setMobileMenuOpen(false)
+  }, [navigate])
 
   const handleLogout = async () => {
     try {
@@ -53,20 +62,23 @@ const Navbar = () => {
     } catch {}
     logout()
     setDropdownOpen(false)
+    setMobileMenuOpen(false)
     navigate('/')
     toast.success('Đã đăng xuất')
   }
+
+  const closeMobile = () => setMobileMenuOpen(false)
 
   return (
     <nav className="navbar">
       <div className="navbar-inner">
         {/* Logo */}
-        <div className="navbar-logo" onClick={() => navigate('/')}>
+        <div className="navbar-logo" onClick={() => { navigate('/'); closeMobile() }}>
           <i className="fa fa-building" style={{ fontSize: '1.4rem' }} />
           <span>Meeting Booking</span>
         </div>
 
-        {/* Nav links */}
+        {/* Desktop Nav links */}
         <ul className="navbar-nav">
           <li>
             <NavLink to="/" end className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
@@ -95,7 +107,7 @@ const Navbar = () => {
           )}
         </ul>
 
-        {/* Right side */}
+        {/* Right side — desktop */}
         <div className="navbar-right">
           {user ? (
             <div className="user-menu" ref={dropRef}>
@@ -106,7 +118,7 @@ const Navbar = () => {
                   className="user-avatar"
                   onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/400x300/2e2a24/c9a96e?text=No+Image' }}
                 />
-                <span>{user.FullName}</span>
+                <span className="navbar-username">{user.FullName}</span>
                 <i className={`fa fa-chevron-${dropdownOpen ? 'up' : 'down'}`} style={{ fontSize: '0.7rem' }} />
               </button>
               {dropdownOpen && (
@@ -133,25 +145,82 @@ const Navbar = () => {
               <button
                 onClick={toggleTheme}
                 title={theme === 'dark' ? 'Giao diện sáng' : 'Giao diện tối'}
-                style={{
-                  background: 'transparent', border: '1px solid var(--border)',
-                  borderRadius: '50%', width: 34, height: 34,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  cursor: 'pointer', color: 'var(--accent)', fontSize: '0.9rem',
-                }}
+                className="theme-toggle-btn"
               >
                 <i className={`fa ${theme === 'dark' ? 'fa-sun' : 'fa-moon'}`} />
               </button>
-              <button className="btn btn-secondary btn-sm" onClick={openRegisterModal}>
-                <i className="fa fa-user-plus" /> Đăng ký
+              <button className="btn btn-secondary btn-sm navbar-auth-btn" onClick={openRegisterModal}>
+                <i className="fa fa-user-plus" /> <span>Đăng ký</span>
               </button>
-              <button className="btn btn-primary btn-sm" onClick={openLoginModal}>
-                <i className="fa fa-sign-in-alt" /> Đăng nhập
+              <button className="btn btn-primary btn-sm navbar-auth-btn" onClick={openLoginModal}>
+                <i className="fa fa-sign-in-alt" /> <span>Đăng nhập</span>
               </button>
             </div>
           )}
+
+          {/* Hamburger button — mobile only */}
+          <button
+            className="hamburger-btn"
+            onClick={() => setMobileMenuOpen(v => !v)}
+            aria-label="Menu"
+          >
+            <i className={`fa ${mobileMenuOpen ? 'fa-times' : 'fa-bars'}`} />
+          </button>
         </div>
       </div>
+
+      {/* Mobile nav menu */}
+      {mobileMenuOpen && (
+        <div className="mobile-nav" ref={mobileRef}>
+          <NavLink to="/" end className={({ isActive }) => `mobile-nav-link ${isActive ? 'active' : ''}`} onClick={closeMobile}>
+            <i className="fa fa-home" /> Trang chủ
+          </NavLink>
+          <NavLink to="/calendar" className={({ isActive }) => `mobile-nav-link ${isActive ? 'active' : ''}`} onClick={closeMobile}>
+            <i className="fa fa-calendar-alt" /> Lịch phòng
+          </NavLink>
+          {user && (
+            <NavLink to="/report" className={({ isActive }) => `mobile-nav-link ${isActive ? 'active' : ''}`} onClick={closeMobile}>
+              <i className="fa fa-chart-bar" /> Thống kê
+            </NavLink>
+          )}
+          {admin && (
+            <NavLink to="/admin" className={({ isActive }) => `mobile-nav-link ${isActive ? 'active' : ''}`} onClick={closeMobile}>
+              <i className="fa fa-shield-alt" /> Quản trị <PendingBadge />
+            </NavLink>
+          )}
+          <div className="mobile-nav-divider" />
+          {user ? (
+            <>
+              <button className="mobile-nav-link" onClick={() => { openUserModal(user.UserID); closeMobile() }}>
+                <i className="fa fa-user" /> Cá nhân
+              </button>
+              <button className="mobile-nav-link" onClick={() => { openChangePassModal(); closeMobile() }}>
+                <i className="fa fa-key" /> Đổi mật khẩu
+              </button>
+              <button className="mobile-nav-link" onClick={() => { toggleTheme(); closeMobile() }}>
+                <i className={`fa ${theme === 'dark' ? 'fa-sun' : 'fa-moon'}`} />
+                {theme === 'dark' ? 'Giao diện sáng' : 'Giao diện tối'}
+              </button>
+              <button className="mobile-nav-link danger" onClick={handleLogout}>
+                <i className="fa fa-sign-out-alt" /> Đăng xuất
+              </button>
+            </>
+          ) : (
+            <>
+              <button className="mobile-nav-link" onClick={() => { toggleTheme(); closeMobile() }}>
+                <i className={`fa ${theme === 'dark' ? 'fa-sun' : 'fa-moon'}`} />
+                {theme === 'dark' ? 'Giao diện sáng' : 'Giao diện tối'}
+              </button>
+              <button className="mobile-nav-link" onClick={() => { openRegisterModal(); closeMobile() }}>
+                <i className="fa fa-user-plus" /> Đăng ký
+              </button>
+              <button className="mobile-nav-link accent" onClick={() => { openLoginModal(); closeMobile() }}>
+                <i className="fa fa-sign-in-alt" /> Đăng nhập
+              </button>
+            </>
+          )}
+        </div>
+      )}
     </nav>
   )
 }

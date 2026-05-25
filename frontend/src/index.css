@@ -757,17 +757,144 @@ input[type="datetime-local"].form-control::-webkit-calendar-picker-indicator:hov
 .chat-send:hover { background: var(--accent-light); }
 .chat-send:disabled { opacity: 0.5; cursor: not-allowed; }
 
+/* ─── Hamburger / Mobile nav ─────────────────────── */
+.hamburger-btn {
+  display: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 1.1rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: var(--radius-sm);
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition);
+  margin-left: 0.5rem;
+}
+.hamburger-btn:hover { background: var(--bg-hover); }
+
+.mobile-nav {
+  display: none;
+  position: absolute;
+  top: 70px;
+  left: 0;
+  right: 0;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  z-index: 999;
+  flex-direction: column;
+  box-shadow: var(--shadow-md);
+}
+.mobile-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1.25rem;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-decoration: none;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  transition: all var(--transition);
+  border-left: 3px solid transparent;
+}
+.mobile-nav-link:hover, .mobile-nav-link.active {
+  color: var(--accent);
+  background: rgba(201,169,110,0.08);
+  border-left-color: var(--accent);
+}
+.mobile-nav-link.danger { color: var(--danger); }
+.mobile-nav-link.danger:hover { background: rgba(224,92,92,0.1); }
+.mobile-nav-link.accent { color: var(--accent); font-weight: 600; }
+.mobile-nav-divider { height: 1px; background: var(--border); margin: 0.25rem 0; }
+
+.theme-toggle-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--accent);
+  font-size: 0.9rem;
+  transition: all var(--transition);
+}
+.theme-toggle-btn:hover { background: var(--bg-hover); border-color: var(--accent); }
+
 /* ─── Responsive ─────────────────────────────────── */
 @media (max-width: 768px) {
+  /* Navbar */
   .navbar-nav { display: none; }
-  .page-title { font-size: 1.3rem; }
-  .room-grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
-  .chatbot-window { width: calc(100vw - 2rem); right: 1rem; bottom: 5rem; }
-  .modal-box { margin: 0.5rem; }
+  .hamburger-btn { display: flex; }
+  .mobile-nav { display: flex; }
+  .navbar-username { display: none; }
+  .navbar-auth-btn span { display: none; }
+  .navbar-auth-btn { padding: 0.375rem 0.5rem; }
+
+  /* Page */
+  .page-title { font-size: 1.2rem; margin-bottom: 1rem; }
+  .container { padding: 0 1rem; }
+  .page-wrapper { padding: 1.25rem 0; }
+
+  /* Home hero */
+  .hero-title { font-size: 1.4rem !important; }
+  .hero-subtitle { font-size: 0.9rem !important; }
+
+  /* Rooms */
+  .room-grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; }
+
+  /* Chatbot */
+  .chatbot-window {
+    width: calc(100vw - 1.5rem);
+    right: 0.75rem;
+    bottom: 5rem;
+    max-height: 70vh;
+  }
+
+  /* Modals */
+  .modal-overlay { padding: 0.5rem; align-items: flex-end; }
+  .modal-box {
+    margin: 0;
+    max-height: 92vh;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  }
+  .modal-body { padding: 1rem; }
+  .modal-footer { padding: 0.75rem 1rem; }
+
+  /* Stats */
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
+
+  /* Tables — horizontal scroll */
+  .table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  /* Admin page header rows */
+  .admin-page-header {
+    flex-direction: column;
+    align-items: flex-start !important;
+    gap: 0.75rem;
+  }
+
+  /* Search bar */
+  .search-bar { flex-direction: column; align-items: stretch; }
+  .search-input-wrap { min-width: unset; }
+
+  /* Form grids */
+  .form-grid-2 { grid-template-columns: 1fr !important; }
 }
+
 @media (max-width: 480px) {
   .stats-grid { grid-template-columns: 1fr; }
+  .room-grid { grid-template-columns: 1fr; }
+  .modal-box { max-height: 95vh; }
+  .chatbot-window { width: calc(100vw - 1rem); right: 0.5rem; }
 }
 
 /* ─── Utilities ──────────────────────────────────── */

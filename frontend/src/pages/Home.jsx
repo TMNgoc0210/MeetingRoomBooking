@@ -40,10 +40,10 @@ const Home = () => {
       <div className="container">
         {/* Hero */}
         <div style={{ textAlign: 'center', padding: '2.5rem 0 2rem', marginBottom: '0.5rem' }}>
-          <h1 style={{ fontSize: '2rem', fontWeight: 700, marginBottom: '0.5rem' }}>
+          <h1 className="hero-title" style={{ fontSize: '2rem', fontWeight: 700, marginBottom: '0.5rem' }}>
             <span style={{ color: 'var(--accent)' }}>Đặt phòng họp</span> thông minh
           </h1>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '1rem' }}>
+          <p className="hero-subtitle" style={{ color: 'var(--text-secondary)', fontSize: '1rem' }}>
             Tìm và đặt phòng họp dễ dàng — hoặc hỏi AI chatbot để được hỗ trợ tức thì
           </p>
         </div>

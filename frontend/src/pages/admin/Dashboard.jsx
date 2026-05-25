@@ -14,7 +14,14 @@ const AdminDashboard = () => {
   const [rooms, setRooms] = useState([])
   const [filter, setFilter] = useState({ month: dayjs().month() + 1, year: dayjs().year(), roomID: 0 })
   const [loadingChart, setLoadingChart] = useState(false)
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768)
   const navigate = useNavigate()
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= 768)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
 
   useEffect(() => {
     reportService.getSummary().then(r => setSummary(r.data.data)).catch(() => {})
@@ -48,7 +55,7 @@ const AdminDashboard = () => {
   const years = Array.from({ length: 5 }, (_, i) => dayjs().year() - i)
 
   return (
-    <div style={{ padding: '1.75rem 2rem', minHeight: '100%' }}>
+    <div style={{ padding: isMobile ? '1rem' : '1.75rem 2rem', minHeight: '100%' }}>
       {/* Header */}
       <div style={{ marginBottom: '1.75rem' }}>
         <h1 style={{ fontSize: '1.4rem', fontWeight: 700, color: 'var(--accent)', marginBottom: 4 }}>
@@ -76,7 +83,7 @@ const AdminDashboard = () => {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '1rem', alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 340px', gap: '1rem', alignItems: 'start' }}>
         {/* Chart */}
         <div className="card">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>

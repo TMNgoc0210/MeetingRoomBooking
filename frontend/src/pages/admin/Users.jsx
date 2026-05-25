@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react'
-import { userService, facultyService, uploadService } from '../../services'
+import { userService, facultyService, uploadService, roleService } from '../../services'
 import useAuthStore from '../../store/authStore'
 import toast from 'react-hot-toast'
 
-const EMPTY = { userID: '', fullName: '', facultyID: '', mobi: '', email: '', visible: true, roles: false, password: '', avatar: '' }
+const EMPTY = { userID: '', fullName: '', facultyID: '', mobi: '', email: '', visible: true, roles: false, password: '', avatar: '', roleIDs: [] }
 
 const AdminUsers = () => {
   const [users, setUsers] = useState([])
   const [faculties, setFaculties] = useState([])
+  const [allRoles, setAllRoles] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState({ fullName: '', facultyID: '' })
   const [modal, setModal] = useState({ open: false, isEdit: false })
@@ -26,11 +27,23 @@ const AdminUsers = () => {
   useEffect(() => {
     fetchUsers()
     facultyService.getAll().then(r => setFaculties(r.data.data || []))
+    roleService.getAll().then(r => setAllRoles(r.data.data || []))
   }, [])
 
   const openAdd = () => { setForm(EMPTY); setModal({ open: true, isEdit: false }) }
   const openEdit = (u) => {
-    setForm({ userID: u.UserID, fullName: u.FullName, facultyID: u.FacultyID || '', mobi: u.Mobi || '', email: u.Email || '', visible: u.Visible !== false, roles: !!u.Roles, password: '', avatar: u.Avatar || '' })
+    setForm({
+      userID: u.UserID,
+      fullName: u.FullName,
+      facultyID: u.FacultyID || '',
+      mobi: u.Mobi || '',
+      email: u.Email || '',
+      visible: u.Visible !== false,
+      roles: !!u.Roles,
+      password: '',
+      avatar: u.Avatar || '',
+      roleIDs: (u.assignedRoles || []).map(r => r.RoleID),
+    })
     setModal({ open: true, isEdit: true })
   }
 
@@ -53,6 +66,15 @@ const AdminUsers = () => {
       toast.success('Upload ảnh thành công')
     } catch { toast.error('Upload thất bại') }
     setUploading(false)
+  }
+
+  const toggleRole = (roleID) => {
+    setForm(f => ({
+      ...f,
+      roleIDs: f.roleIDs.includes(roleID)
+        ? f.roleIDs.filter(id => id !== roleID)
+        : [...f.roleIDs, roleID],
+    }))
   }
 
   const handleSave = async (e) => {
@@ -102,7 +124,7 @@ const AdminUsers = () => {
         <div className="table-wrapper">
           <table className="table">
             <thead>
-              <tr><th>Ảnh</th><th>Mã / Họ tên</th><th>Khoa</th><th>Email</th><th>SĐT</th><th>Quyền</th><th>Trạng thái</th><th style={{ textAlign: 'right' }}>Thao tác</th></tr>
+              <tr><th>Ảnh</th><th>Mã / Họ tên</th><th>Khoa</th><th>Email</th><th>SĐT</th><th>Quyền / Vai trò</th><th>Trạng thái</th><th style={{ textAlign: 'right' }}>Thao tác</th></tr>
             </thead>
             <tbody>
               {loading ? (
@@ -126,6 +148,17 @@ const AdminUsers = () => {
                     <span className={`badge ${u.Roles ? 'badge-warning' : 'badge-accent'}`}>
                       {u.Roles ? <><i className="fa fa-crown" /> Admin</> : 'User'}
                     </span>
+                    {u.assignedRoles?.length > 0 && (
+                      <div style={{ marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+                        {u.assignedRoles.map(r => (
+                          <span key={r.RoleID} style={{
+                            fontSize: '0.7rem', padding: '1px 6px', borderRadius: 10,
+                            background: 'var(--accent-muted, rgba(201,169,110,0.15))',
+                            color: 'var(--accent)', border: '1px solid var(--accent)',
+                          }}>{r.Name}</span>
+                        ))}
+                      </div>
+                    )}
                   </td>
                   <td>
                     <span className={`badge ${u.Visible ? 'badge-success' : 'badge-danger'}`}>
@@ -189,10 +222,37 @@ const AdminUsers = () => {
                       onChange={e => setForm({ ...form, mobi: e.target.value })} />
                   </div>
                 </div>
+
                 <div style={{ display: 'flex', gap: '1.5rem', marginBottom: '1rem' }}>
                   <label className="form-check"><input type="checkbox" checked={form.roles} onChange={e => setForm({ ...form, roles: e.target.checked })} /> Quyền Admin</label>
                   <label className="form-check"><input type="checkbox" checked={form.visible} onChange={e => setForm({ ...form, visible: e.target.checked })} /> Hiển thị</label>
                 </div>
+
+                {allRoles.length > 0 && (
+                  <div className="form-group">
+                    <label className="form-label">Vai trò</label>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      {allRoles.map(r => {
+                        const checked = form.roleIDs.includes(r.RoleID)
+                        return (
+                          <label key={r.RoleID} style={{
+                            display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer',
+                            padding: '5px 12px', borderRadius: 8, fontSize: '0.85rem',
+                            border: `1px solid ${checked ? 'var(--accent)' : 'var(--border)'}`,
+                            background: checked ? 'rgba(201,169,110,0.12)' : 'var(--bg-secondary)',
+                            color: checked ? 'var(--accent)' : 'var(--text-secondary)',
+                            transition: 'all 0.15s',
+                          }}>
+                            <input type="checkbox" style={{ display: 'none' }} checked={checked} onChange={() => toggleRole(r.RoleID)} />
+                            <i className={`fa ${checked ? 'fa-check-square' : 'fa-square'}`} />
+                            {r.Name}
+                          </label>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 <div className="form-group mb-0">
                   <label className="form-label">Ảnh đại diện</label>
                   <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>

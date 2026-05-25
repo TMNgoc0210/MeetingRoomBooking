@@ -206,14 +206,14 @@ const insertRoom = db.prepare(
    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, '')`
 );
 
-const r1 = insertRoom.run('Phòng họp A101',          a1, 20, 1, 1, 1, 0, 60, 'Phòng họp lớn tầng 1 khu A, đầy đủ thiết bị hội nghị').lastInsertRowid;
-const r2 = insertRoom.run('Phòng họp A201',          a1, 10, 1, 0, 0, 0, 60, 'Phòng họp nhỏ tầng 2 khu A').lastInsertRowid;
-const r3 = insertRoom.run('Phòng họp A301',          a1, 30, 1, 1, 0, 0, 60, 'Phòng hội thảo tầng 3 khu A').lastInsertRowid;
-const r4 = insertRoom.run('Phòng họp B101',          a2, 15, 0, 1, 0, 0, 60, 'Phòng họp khu thư viện').lastInsertRowid;
-const r5 = insertRoom.run('Phòng seminar B201',      a2, 50, 1, 1, 0, 0, 60, 'Hội trường thư viện').lastInsertRowid;
-const r6 = insertRoom.run('Lab C101',                a3, 25, 0, 0, 0, 0, 60, 'Phòng thực hành khu C').lastInsertRowid;
-const r7 = insertRoom.run('Phòng Hội Nghị VIP B301', a2, 40, 1, 1, 1, 0, 60, 'Phòng hội nghị cao cấp tầng 3 khu Thư viện, trang bị hệ thống hội nghị truyền hình chuyên nghiệp, sức chứa 40 người. Yêu cầu phê duyệt admin.').lastInsertRowid;
-const r8 = insertRoom.run('Phòng Đào Tạo C202',     a3, 35, 1, 1, 0, 0, 60, 'Phòng đào tạo và hội thảo khu thí nghiệm tầng 2, bố trí linh hoạt dạng lớp học hoặc hội thảo, tích hợp hệ thống ghi âm và streaming trực tuyến.').lastInsertRowid;
+const r1 = insertRoom.run('Phòng họp A101',          a1, 20, 1, 1, 1, 0, 60, 'Phòng họp lớn tầng 1 khu A, đầy đủ thiết bị hội nghị',          'https://picsum.photos/seed/room-a101/800/400').lastInsertRowid;
+const r2 = insertRoom.run('Phòng họp A201',          a1, 10, 1, 0, 0, 0, 60, 'Phòng họp nhỏ tầng 2 khu A',                                       'https://picsum.photos/seed/room-a201/800/400').lastInsertRowid;
+const r3 = insertRoom.run('Phòng họp A301',          a1, 30, 1, 1, 0, 0, 60, 'Phòng hội thảo tầng 3 khu A',                                       'https://picsum.photos/seed/room-a301/800/400').lastInsertRowid;
+const r4 = insertRoom.run('Phòng họp B101',          a2, 15, 0, 1, 0, 0, 60, 'Phòng họp khu thư viện',                                            'https://picsum.photos/seed/room-b101/800/400').lastInsertRowid;
+const r5 = insertRoom.run('Phòng seminar B201',      a2, 50, 1, 1, 0, 0, 60, 'Hội trường thư viện',                                               'https://picsum.photos/seed/room-b201/800/400').lastInsertRowid;
+const r6 = insertRoom.run('Lab C101',                a3, 25, 0, 0, 0, 0, 60, 'Phòng thực hành khu C',                                             'https://picsum.photos/seed/room-c101/800/400').lastInsertRowid;
+const r7 = insertRoom.run('Phòng Hội Nghị VIP B301', a2, 40, 1, 1, 1, 0, 60, 'Phòng hội nghị cao cấp tầng 3 khu Thư viện, trang bị hệ thống hội nghị truyền hình chuyên nghiệp, sức chứa 40 người. Yêu cầu phê duyệt admin.', 'https://picsum.photos/seed/room-b301/800/400').lastInsertRowid;
+const r8 = insertRoom.run('Phòng Đào Tạo C202',     a3, 35, 1, 1, 0, 0, 60, 'Phòng đào tạo và hội thảo khu thí nghiệm tầng 2, bố trí linh hoạt dạng lớp học hoặc hội thảo, tích hợp hệ thống ghi âm và streaming trực tuyến.',  'https://picsum.photos/seed/room-c202/800/400').lastInsertRowid;
 console.log('✅ Rooms seeded (8 phòng)');
 
 // ─── Equipment ───────────────────────────────────────────────────────────────
