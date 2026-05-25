@@ -144,7 +144,7 @@ h1, h2, h3, h4, h5, h6 {
   color: var(--accent);
   cursor: pointer;
 }
-.navbar-logo img { height: 36px; border-radius: 4px; }
+.navbar-logo img { height: 42px; width: 42px; border-radius: 50%; object-fit: cover; }
 .navbar-nav {
   display: flex;
   align-items: center;
