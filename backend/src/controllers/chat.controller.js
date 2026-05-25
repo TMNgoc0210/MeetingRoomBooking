@@ -685,13 +685,14 @@ async function runAI({ messages, systemPrompt, userID, tools }) {
       if (lastErr) throw lastErr;
     } catch (apiErr) {
       console.error('[Chat] Groq API error in loop:', apiErr.message?.slice(0, 120));
-      const isToolFmt  = apiErr.message?.includes('tool call validation failed');
-      const isRateLimit = apiErr.status === 429 || apiErr.message?.includes('rate limit');
+      const isRateLimit   = apiErr.status === 429 || apiErr.message?.includes('rate limit');
+      const isFuncFail    = apiErr.message?.includes('failed_generation') || apiErr.message?.includes('Failed to call a function');
+      const isToolFmt     = apiErr.message?.includes('tool call validation failed');
       return {
-        reply: isToolFmt
-          ? 'Tôi chưa hiểu rõ yêu cầu. Bạn có thể thử diễn đạt lại không?'
-          : isRateLimit
-            ? 'AI đang quá tải, vui lòng thử lại sau vài giây ⏳'
+        reply: (isRateLimit || isFuncFail)
+          ? 'AI đang quá tải, vui lòng thử lại sau vài giây ⏳'
+          : isToolFmt
+            ? 'Tôi chưa hiểu rõ yêu cầu. Bạn có thể thử diễn đạt lại không?'
             : 'AI gặp lỗi tạm thời, vui lòng thử lại.',
         bookingResult, pendingData, history: all.slice(1),
       };
@@ -850,7 +851,7 @@ Trả lời ngắn gọn, tiếng Việt, emoji vừa phải. Ngoài chủ đề
     let msg = 'AI đang gặp sự cố, vui lòng thử lại.';
     if (raw.includes('tool call validation failed') || raw.includes('invalid_request_error')) {
       msg = 'AI không thể xử lý yêu cầu theo cách này. Vui lòng thử diễn đạt khác.';
-    } else if (raw.includes('rate limit') || raw.includes('quota') || err.status === 429) {
+    } else if (raw.includes('rate limit') || raw.includes('quota') || raw.includes('failed_generation') || raw.includes('Failed to call a function') || err.status === 429) {
       msg = 'AI đang quá tải, vui lòng thử lại sau vài giây ⏳';
     } else if (raw.includes('GROQ_API_KEY') || raw.includes('API key')) {
       msg = 'Chưa cấu hình API key AI.';

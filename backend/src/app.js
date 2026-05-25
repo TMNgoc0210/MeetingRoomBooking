@@ -23,6 +23,9 @@ app.use(helmet({
   },
 }));
 
+// ─── Trust proxy (needed for Render / reverse proxy deployments) ──────────────
+app.set('trust proxy', 1);
+
 // ─── CORS ─────────────────────────────────────────────────────
 app.use(
   cors({
