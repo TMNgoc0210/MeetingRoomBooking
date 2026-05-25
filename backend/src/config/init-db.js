@@ -203,7 +203,7 @@ console.log('✅ Areas seeded');
 // ─── Rooms (8 phòng) ─────────────────────────────────────────────────────────
 const insertRoom = db.prepare(
   `INSERT INTO Room (RoomName, AreaID, Seat, PhoneCall, VideoCall, IsVIP, VIPCondition, VIPMinutes, Visible, "Desc", Avatar)
-   VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, '')`
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`
 );
 
 const r1 = insertRoom.run('Phòng họp A101',          a1, 20, 1, 1, 1, 0, 60, 'Phòng họp lớn tầng 1 khu A, đầy đủ thiết bị hội nghị',          'https://picsum.photos/seed/room-a101/800/400').lastInsertRowid;
