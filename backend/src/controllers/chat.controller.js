@@ -8,8 +8,8 @@ const Groq = require('groq-sdk');
 const { query, queryOne, execute } = require('../config/db');
 const { success, error, badRequest } = require('../utils/response');
 
-const MODEL_PRIMARY  = 'llama-3.1-8b-instant';    // 20k TPM — primary (high limit)
-const MODEL_FALLBACK = 'llama-3.3-70b-versatile'; // 6k TPM  — fallback (quality)
+const MODEL_PRIMARY  = 'llama-3.3-70b-versatile'; // 6k TPM — best function calling
+const MODEL_FALLBACK = 'llama-3.1-8b-instant';    // 20k TPM — fallback plain text
 
 // ─── Groq singleton ───────────────────────────────────────────────────────────
 let _groq = null;
