@@ -8,7 +8,7 @@ import toast from 'react-hot-toast'
 
 const WELCOME = {
   role: 'bot',
-  text: 'Xin chào! Tôi có thể giúp bạn tìm và đặt phòng họp.\nHãy nói yêu cầu, ví dụ: "Tìm phòng 10 người lúc 2h chiều mai"',
+  text: 'Xin chào! Tôi là trợ lý ảo, có thể giúp bạn tìm và đặt phòng họp.\nHãy nói yêu cầu, ví dụ: "Tìm phòng 10 người lúc 2h chiều mai"',
 }
 
 const QUICK_REPLIES = [
@@ -243,7 +243,7 @@ const ChatbotWidget = () => {
             <div className="chat-header-info">
               <div className="chat-avatar"><img src="/chatbot-avatar.png" alt="bot" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} /></div>
               <div>
-                <div className="chat-name">AI Booking Assistant</div>
+                <div className="chat-name">Trợ lý ảo</div>
                 <div className="chat-status">● Trực tuyến</div>
               </div>
             </div>

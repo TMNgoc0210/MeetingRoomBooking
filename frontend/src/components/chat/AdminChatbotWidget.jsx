@@ -330,7 +330,7 @@ const AdminChatbotWidget = () => {
       {/* FAB */}
       <button
         onClick={() => setOpen(v => !v)}
-        title="AI Admin Assistant"
+        title="Trợ lý ảo Admin"
         style={{
           position: 'fixed', bottom: '1.5rem', right: '1.5rem',
           width: 52, height: 52, borderRadius: '50%',
@@ -369,7 +369,7 @@ const AdminChatbotWidget = () => {
               </div>
               <div>
                 <div style={{ color: '#fff', fontWeight: 700, fontSize: '0.9rem', lineHeight: 1.2 }}>
-                  AI Admin Assistant
+                  Trợ lý ảo Admin
                 </div>
                 <div style={{ color: 'rgba(255,255,255,0.75)', fontSize: '0.72rem' }}>● Trực tuyến</div>
               </div>
