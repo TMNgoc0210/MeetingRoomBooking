@@ -177,10 +177,18 @@ if (userCount.c > 0) {
 
 // ─── Faculties ───────────────────────────────────────────────────────────────
 const insertFaculty = db.prepare(`INSERT INTO Faculty (FacultyName, Visible) VALUES (?, 1)`);
-const f1 = insertFaculty.run('Khoa Công nghệ Thông tin').lastInsertRowid;
-const f2 = insertFaculty.run('Khoa Kinh tế').lastInsertRowid;
-const f3 = insertFaculty.run('Phòng Đào tạo').lastInsertRowid;
-const f4 = insertFaculty.run('Ban Giám hiệu').lastInsertRowid;
+const f1  = insertFaculty.run('Khoa Công nghệ Thông tin').lastInsertRowid;
+const f2  = insertFaculty.run('Khoa Kinh tế').lastInsertRowid;
+const f3  = insertFaculty.run('Phòng Đào tạo').lastInsertRowid;
+const f4  = insertFaculty.run('Ban Giám hiệu').lastInsertRowid;
+const f5  = insertFaculty.run('Khoa Cơ khí - Xây dựng').lastInsertRowid;
+const f6  = insertFaculty.run('Khoa Điện - Điện tử').lastInsertRowid;
+const f7  = insertFaculty.run('Khoa Hóa học - Thực phẩm').lastInsertRowid;
+const f8  = insertFaculty.run('Khoa Quản trị Kinh doanh').lastInsertRowid;
+const f9  = insertFaculty.run('Khoa Ngoại ngữ').lastInsertRowid;
+const f10 = insertFaculty.run('Phòng Hành chính - Nhân sự').lastInsertRowid;
+const f11 = insertFaculty.run('Phòng Tài chính - Kế toán').lastInsertRowid;
+const f12 = insertFaculty.run('Trung tâm Nghiên cứu & Phát triển').lastInsertRowid;
 console.log('✅ Faculties seeded');
 
 // ─── Users ───────────────────────────────────────────────────────────────────
@@ -188,10 +196,32 @@ const insertUser = db.prepare(
   `INSERT INTO "User" (UserID, FullName, Password, Roles, Visible, FacultyID, Email, Mobi)
    VALUES (?, ?, ?, ?, 1, ?, ?, ?)`
 );
-insertUser.run('admin',  'Quản trị viên',  bcrypt.hashSync('admin123', 10), 1, f4, '', '');
-insertUser.run('user01', 'Nguyễn Văn An',  bcrypt.hashSync('123456', 10),   0, f1, 'an@email.com', '');
-insertUser.run('user02', 'Trần Thị Bình',  bcrypt.hashSync('123456', 10),   0, f2, 'binh@email.com', '');
-console.log('✅ Users seeded (admin/admin123, user01/123456, user02/123456)');
+const h = (p) => bcrypt.hashSync(p, 10);
+insertUser.run('admin',      'Quản trị viên',         h('admin123'), 1, f4,  'admin@university.edu.vn',              '');
+insertUser.run('user01',     'Nguyễn Văn An',          h('123456'),  0, f1,  'an.nguyen@university.edu.vn',          '');
+insertUser.run('user02',     'Trần Thị Bình',          h('123456'),  0, f2,  'binh.tran@university.edu.vn',          '');
+insertUser.run('ngocphan',   'Trần Minh Ngọc',         h('123456'),  0, f1,  'minhngocphanme457@gmail.com',          '');
+insertUser.run('ngocpro457', 'Nguyễn Minh Pro',        h('123456'),  0, f1,  'minhngocpro457@gmail.com',             '');
+insertUser.run('ngoctran457','Phan Ngọc Trần Minh',    h('123456'),  0, f2,  'minhngocphanmetran457@gmail.com',      '');
+insertUser.run('user03',     'Lê Văn Cường',           h('123456'),  0, f1,  'cuong.le@university.edu.vn',           '');
+insertUser.run('user04',     'Phạm Thị Dung',          h('123456'),  0, f2,  'dung.pham@university.edu.vn',          '');
+insertUser.run('user05',     'Hoàng Minh Đức',         h('123456'),  0, f3,  'duc.hoang@university.edu.vn',          '');
+insertUser.run('user06',     'Nguyễn Thu Hà',          h('123456'),  0, f1,  'ha.nguyen@university.edu.vn',          '');
+insertUser.run('user07',     'Trần Quốc Hùng',         h('123456'),  0, f4,  'hung.tran@university.edu.vn',          '');
+insertUser.run('user08',     'Lê Thị Kim Lan',         h('123456'),  0, f5,  'lan.le@university.edu.vn',             '');
+insertUser.run('user09',     'Vũ Minh Long',           h('123456'),  0, f6,  'long.vu@university.edu.vn',            '');
+insertUser.run('user10',     'Đặng Thị Bích Mai',      h('123456'),  0, f9,  'mai.dang@university.edu.vn',           '');
+insertUser.run('user11',     'Bùi Quang Nam',          h('123456'),  0, f8,  'nam.bui@university.edu.vn',            '');
+insertUser.run('user12',     'Ngô Thị Oanh',           h('123456'),  0, f10, 'oanh.ngo@university.edu.vn',           '');
+insertUser.run('user13',     'Phạm Văn Phúc',          h('123456'),  0, f11, 'phuc.pham@university.edu.vn',          '');
+insertUser.run('user14',     'Dương Thị Quỳnh',        h('123456'),  0, f1,  'quynh.duong@university.edu.vn',        '');
+insertUser.run('user15',     'Hoàng Văn Sơn',          h('123456'),  0, f2,  'son.hoang@university.edu.vn',          '');
+insertUser.run('user16',     'Lý Thị Thanh',           h('123456'),  0, f7,  'thanh.ly@university.edu.vn',           '');
+insertUser.run('user17',     'Đinh Công Tuấn',         h('123456'),  0, f6,  'tuan.dinh@university.edu.vn',          '');
+insertUser.run('user18',     'Trịnh Thị Uyên',         h('123456'),  0, f12, 'uyen.trinh@university.edu.vn',         '');
+insertUser.run('user19',     'Phan Quốc Việt',         h('123456'),  0, f8,  'viet.phan@university.edu.vn',          '');
+insertUser.run('user20',     'Mai Thị Xuân',           h('123456'),  0, f9,  'xuan.mai@university.edu.vn',           '');
+console.log('✅ Users seeded (admin/admin123, user01-20/123456, ngocphan|ngocpro457|ngoctran457/123456)');
 
 // ─── Areas ───────────────────────────────────────────────────────────────────
 const insertArea = db.prepare(`INSERT INTO Area (AreaName, Visible) VALUES (?, 1)`);
@@ -206,14 +236,24 @@ const insertRoom = db.prepare(
    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`
 );
 
-const r1 = insertRoom.run('Phòng họp A101',          a1, 20, 1, 1, 1, 0, 60, 'Phòng họp lớn tầng 1 khu A, đầy đủ thiết bị hội nghị',          'https://picsum.photos/seed/room-a101/800/400').lastInsertRowid;
-const r2 = insertRoom.run('Phòng họp A201',          a1, 10, 1, 0, 0, 0, 60, 'Phòng họp nhỏ tầng 2 khu A',                                       'https://picsum.photos/seed/room-a201/800/400').lastInsertRowid;
-const r3 = insertRoom.run('Phòng họp A301',          a1, 30, 1, 1, 0, 0, 60, 'Phòng hội thảo tầng 3 khu A',                                       'https://picsum.photos/seed/room-a301/800/400').lastInsertRowid;
-const r4 = insertRoom.run('Phòng họp B101',          a2, 15, 0, 1, 0, 0, 60, 'Phòng họp khu thư viện',                                            'https://picsum.photos/seed/room-b101/800/400').lastInsertRowid;
-const r5 = insertRoom.run('Phòng seminar B201',      a2, 50, 1, 1, 0, 0, 60, 'Hội trường thư viện',                                               'https://picsum.photos/seed/room-b201/800/400').lastInsertRowid;
-const r6 = insertRoom.run('Lab C101',                a3, 25, 0, 0, 0, 0, 60, 'Phòng thực hành khu C',                                             'https://picsum.photos/seed/room-c101/800/400').lastInsertRowid;
-const r7 = insertRoom.run('Phòng Hội Nghị VIP B301', a2, 40, 1, 1, 1, 0, 60, 'Phòng hội nghị cao cấp tầng 3 khu Thư viện, trang bị hệ thống hội nghị truyền hình chuyên nghiệp, sức chứa 40 người. Yêu cầu phê duyệt admin.', 'https://picsum.photos/seed/room-b301/800/400').lastInsertRowid;
-const r8 = insertRoom.run('Phòng Đào Tạo C202',     a3, 35, 1, 1, 0, 0, 60, 'Phòng đào tạo và hội thảo khu thí nghiệm tầng 2, bố trí linh hoạt dạng lớp học hoặc hội thảo, tích hợp hệ thống ghi âm và streaming trực tuyến.',  'https://picsum.photos/seed/room-c202/800/400').lastInsertRowid;
+const IMG = [
+  'https://images.unsplash.com/photo-1497366216548-37526070297c?w=800&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=800&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=800&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1573167507387-6b4b98cb7c13?w=800&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1552664730-d307ca884978?w=800&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1556761175-b413da4baf72?w=800&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1497366412874-3415097a27e7?w=800&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1531973576160-7125cd663d86?w=800&h=400&fit=crop',
+];
+const r1 = insertRoom.run('Phòng họp A101',          a1, 20, 1, 1, 1, 0, 60, 'Phòng họp lớn tầng 1 khu A, đầy đủ thiết bị hội nghị',          IMG[0]).lastInsertRowid;
+const r2 = insertRoom.run('Phòng họp A201',          a1, 10, 1, 0, 0, 0, 60, 'Phòng họp nhỏ tầng 2 khu A',                                     IMG[1]).lastInsertRowid;
+const r3 = insertRoom.run('Phòng họp A301',          a1, 30, 1, 1, 0, 0, 60, 'Phòng hội thảo tầng 3 khu A',                                     IMG[2]).lastInsertRowid;
+const r4 = insertRoom.run('Phòng họp B101',          a2, 15, 0, 1, 0, 0, 60, 'Phòng họp khu thư viện',                                          IMG[3]).lastInsertRowid;
+const r5 = insertRoom.run('Phòng seminar B201',      a2, 50, 1, 1, 0, 0, 60, 'Hội trường thư viện',                                             IMG[4]).lastInsertRowid;
+const r6 = insertRoom.run('Lab C101',                a3, 25, 0, 0, 0, 0, 60, 'Phòng thực hành khu C',                                           IMG[5]).lastInsertRowid;
+const r7 = insertRoom.run('Phòng Hội Nghị VIP B301', a2, 40, 1, 1, 1, 0, 60, 'Phòng hội nghị cao cấp tầng 3 khu Thư viện, trang bị hệ thống hội nghị truyền hình chuyên nghiệp, sức chứa 40 người. Yêu cầu phê duyệt admin.', IMG[6]).lastInsertRowid;
+const r8 = insertRoom.run('Phòng Đào Tạo C202',     a3, 35, 1, 1, 0, 0, 60, 'Phòng đào tạo và hội thảo khu thí nghiệm tầng 2, bố trí linh hoạt dạng lớp học hoặc hội thảo, tích hợp hệ thống ghi âm và streaming trực tuyến.', IMG[7]).lastInsertRowid;
 console.log('✅ Rooms seeded (8 phòng)');
 
 // ─── Equipment ───────────────────────────────────────────────────────────────
@@ -290,4 +330,4 @@ console.log('✅ Sample bookings seeded');
 
 db.close();
 console.log('\n🎉 Database initialized successfully!');
-console.log('   Login: admin/admin123 | user01/123456 | user02/123456');
+console.log('   Login: admin/admin123 | user01-user20/123456 | ngocphan|ngocpro457|ngoctran457/123456');

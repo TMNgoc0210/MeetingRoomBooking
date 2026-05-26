@@ -211,5 +211,79 @@ if (adminRoleRow) {
 }
 console.log('  ✅ UserRole table ready');
 
+// ─── Migration 12: Update room avatars → Unsplash URLs ───────────────────────
+console.log('\n[12] Room avatars → online images');
+const ROOM_IMAGES = [
+  'https://images.unsplash.com/photo-1497366216548-37526070297c?w=800&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=800&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=800&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1573167507387-6b4b98cb7c13?w=800&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1552664730-d307ca884978?w=800&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1556761175-b413da4baf72?w=800&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1497366412874-3415097a27e7?w=800&h=400&fit=crop',
+  'https://images.unsplash.com/photo-1531973576160-7125cd663d86?w=800&h=400&fit=crop',
+];
+const roomsToUpdate = db.prepare('SELECT RoomID, Avatar FROM Room WHERE Visible=1 ORDER BY RoomID').all();
+const updateAvatar = db.prepare('UPDATE Room SET Avatar=? WHERE RoomID=?');
+roomsToUpdate.forEach((r, i) => {
+  if (!r.Avatar || r.Avatar.startsWith('/uploads/') || r.Avatar === '') {
+    updateAvatar.run(ROOM_IMAGES[i % ROOM_IMAGES.length], r.RoomID);
+    console.log(`  ✅ Updated Room #${r.RoomID} avatar`);
+  } else {
+    console.log(`  ⏭️  Room #${r.RoomID} avatar already set`);
+  }
+});
+
+// ─── Migration 13: Seed thêm khoa/đơn vị ─────────────────────────────────────
+console.log('\n[13] Seed additional faculties');
+const insertFacultyM = db.prepare(`INSERT OR IGNORE INTO Faculty (FacultyName, Visible) VALUES (?, 1)`);
+for (const name of [
+  'Khoa Cơ khí - Xây dựng',
+  'Khoa Điện - Điện tử',
+  'Khoa Hóa học - Thực phẩm',
+  'Khoa Quản trị Kinh doanh',
+  'Khoa Ngoại ngữ',
+  'Phòng Hành chính - Nhân sự',
+  'Phòng Tài chính - Kế toán',
+  'Trung tâm Nghiên cứu & Phát triển',
+]) insertFacultyM.run(name);
+console.log('  ✅ Faculties seeded');
+
+// ─── Migration 14: Seed thêm user test ───────────────────────────────────────
+console.log('\n[14] Seed additional test users');
+const bcrypt = require('bcryptjs');
+const hash = bcrypt.hashSync('123456', 10);
+const getFacID = (name) => db.prepare(`SELECT FacultyID FROM Faculty WHERE FacultyName LIKE '%'||?||'%' LIMIT 1`).get(name)?.FacultyID || null;
+
+const newUsers = [
+  ['ngocphan',   'Trần Minh Ngọc',      'minhngocphanme457@gmail.com',    'Công nghệ Thông tin'],
+  ['ngocpro457', 'Nguyễn Minh Pro',      'minhngocpro457@gmail.com',       'Công nghệ Thông tin'],
+  ['ngoctran457','Phan Ngọc Trần Minh',  'minhngocphanmetran457@gmail.com','Kinh tế'],
+  ['user03',     'Lê Văn Cường',         'cuong.le@university.edu.vn',     'Công nghệ Thông tin'],
+  ['user04',     'Phạm Thị Dung',        'dung.pham@university.edu.vn',    'Kinh tế'],
+  ['user05',     'Hoàng Minh Đức',       'duc.hoang@university.edu.vn',    'Đào tạo'],
+  ['user06',     'Nguyễn Thu Hà',        'ha.nguyen@university.edu.vn',    'Công nghệ Thông tin'],
+  ['user07',     'Trần Quốc Hùng',       'hung.tran@university.edu.vn',    'Ban Giám hiệu'],
+  ['user08',     'Lê Thị Kim Lan',       'lan.le@university.edu.vn',       'Cơ khí'],
+  ['user09',     'Vũ Minh Long',         'long.vu@university.edu.vn',      'Điện'],
+  ['user10',     'Đặng Thị Bích Mai',    'mai.dang@university.edu.vn',     'Ngoại ngữ'],
+  ['user11',     'Bùi Quang Nam',        'nam.bui@university.edu.vn',      'Quản trị Kinh doanh'],
+  ['user12',     'Ngô Thị Oanh',         'oanh.ngo@university.edu.vn',     'Hành chính'],
+  ['user13',     'Phạm Văn Phúc',        'phuc.pham@university.edu.vn',    'Tài chính'],
+  ['user14',     'Dương Thị Quỳnh',      'quynh.duong@university.edu.vn',  'Công nghệ Thông tin'],
+  ['user15',     'Hoàng Văn Sơn',        'son.hoang@university.edu.vn',    'Kinh tế'],
+  ['user16',     'Lý Thị Thanh',         'thanh.ly@university.edu.vn',     'Hóa học'],
+  ['user17',     'Đinh Công Tuấn',       'tuan.dinh@university.edu.vn',    'Điện'],
+  ['user18',     'Trịnh Thị Uyên',       'uyen.trinh@university.edu.vn',   'Nghiên cứu'],
+  ['user19',     'Phan Quốc Việt',       'viet.phan@university.edu.vn',    'Quản trị Kinh doanh'],
+  ['user20',     'Mai Thị Xuân',         'xuan.mai@university.edu.vn',     'Ngoại ngữ'],
+];
+const insertUserM = db.prepare(`INSERT OR IGNORE INTO "User" (UserID,FullName,Password,Roles,Visible,FacultyID,Email) VALUES (?,?,?,0,1,?,?)`);
+for (const [id, name, email, facKeyword] of newUsers) {
+  const facID = getFacID(facKeyword);
+  insertUserM.run(id, name, hash, facID, email);
+}
+console.log(`  ✅ ${newUsers.length} users seeded (password: 123456)`);
+
 db.close();
 console.log('\n🎉 All migrations completed!');
