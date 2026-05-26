@@ -45,14 +45,17 @@ async function ins(sqlStr, params = {}) {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 async function main() {
-  // Tạo database nếu chưa có
   console.log(`📦 Connecting to SQL Server: ${baseConfig.server}`);
-  const masterPool = await sql.connect({ ...baseConfig, database: 'master' });
-  await masterPool.request().query(`
-    IF NOT EXISTS (SELECT name FROM sys.databases WHERE name = N'${DB_NAME}')
-      CREATE DATABASE [${DB_NAME}]
-  `);
-  await masterPool.close();
+
+  // SKIP_CREATE_DB=true khi dùng hosted DB (freesqldatabase, Azure) đã có sẵn DB
+  if (process.env.SKIP_CREATE_DB !== 'true') {
+    const masterPool = await sql.connect({ ...baseConfig, database: 'master' });
+    await masterPool.request().query(`
+      IF NOT EXISTS (SELECT name FROM sys.databases WHERE name = N'${DB_NAME}')
+        CREATE DATABASE [${DB_NAME}]
+    `);
+    await masterPool.close();
+  }
   console.log(`✅ Database [${DB_NAME}] ready`);
 
   // Kết nối vào database đích
