@@ -9,12 +9,15 @@ import EditBookingModal from './components/modals/EditBookingModal'
 import BookingDetailModal from './components/modals/BookingDetailModal'
 import UserModal from './components/modals/UserModal'
 import ChatbotWidget from './components/chat/ChatbotWidget'
+import AdminChatbotWidget from './components/chat/AdminChatbotWidget'
 import useUIStore from './store/uiStore'
 import useSettingsStore from './store/settingsStore'
+import useAuthStore from './store/authStore'
 
 const App = () => {
   const location = useLocation()
   const isAdmin = location.pathname.startsWith('/admin')
+  const isAdminUser = useAuthStore(s => s.isAdmin())
   const theme = useUIStore(s => s.theme)
   const fetchSettings = useSettingsStore(s => s.fetch)
 
@@ -37,8 +40,8 @@ const App = () => {
       <BookingDetailModal />
       <UserModal />
 
-      {/* AI Chatbot — chỉ hiện trên trang user */}
-      {!isAdmin && <ChatbotWidget />}
+      {/* AI Chatbot — admin dùng AdminChatbotWidget ở mọi trang */}
+      {!isAdmin && (isAdminUser ? <AdminChatbotWidget /> : <ChatbotWidget />)}
     </>
   )
 }
