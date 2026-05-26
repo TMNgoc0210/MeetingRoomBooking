@@ -34,7 +34,7 @@ const getByRoom = async (req, res) => {
 const getMyBookings = async (req, res) => {
   try {
     const bookings = await query(
-      `SELECT lr.LineRoomID, lr.RoomID, lr.TimeStart, lr.TimeEnd, lr.Title,
+      `SELECT TOP 50 lr.LineRoomID, lr.RoomID, lr.TimeStart, lr.TimeEnd, lr.Title,
               lr.NumberPerson, lr.Status, lr.CreateDate,
               r.RoomName, r.Avatar AS RoomAvatar, r.IsVIP,
               a.AreaName
@@ -42,8 +42,7 @@ const getMyBookings = async (req, res) => {
        LEFT JOIN Room r ON lr.RoomID = r.RoomID
        LEFT JOIN Area a ON r.AreaID = a.AreaID
        WHERE lr.UserID = @userID
-       ORDER BY lr.TimeStart DESC
-       LIMIT 50`,
+       ORDER BY lr.TimeStart DESC`,
       { userID: req.user.userID }
     );
     return success(res, bookings);
@@ -153,7 +152,8 @@ const addAttendees = async (req, res) => {
     for (const uid of userIDs) {
       try {
         await execute(
-          `INSERT OR IGNORE INTO BookingAttendee (LineRoomID, UserID, Status) VALUES (@lineRoomID, @uid, 0)`,
+          `IF NOT EXISTS (SELECT 1 FROM BookingAttendee WHERE LineRoomID=@lineRoomID AND UserID=@uid)
+           INSERT INTO BookingAttendee (LineRoomID, UserID, Status) VALUES (@lineRoomID, @uid, 0)`,
           { lineRoomID, uid }
         );
         added++;

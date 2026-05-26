@@ -61,12 +61,12 @@ async function searchAvailableRooms({ date, startTime, durationMinutes, minSeat,
   const timeStart  = `${date} ${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}:00`;
   const timeEnd    = `${date} ${String(endH).padStart(2,'0')}:${String(endM).padStart(2,'0')}:00`;
   const cap        = parseInt(minSeat) || 1;
-  const nameFilter = roomName ? `AND r.RoomName LIKE '%' || @roomName || '%'` : '';
+  const nameFilter = roomName ? `AND r.RoomName LIKE '%' + @roomName + '%'` : '';
   const params     = { cap, timeStart, timeEnd };
   if (roomName) params.roomName = roomName;
 
   const rooms = await query(
-    `SELECT r.RoomID, r.RoomName, r.Seat, r.IsVIP, r.Desc, a.AreaName
+    `SELECT r.RoomID, r.RoomName, r.Seat, r.IsVIP, r.[Desc], a.AreaName
      FROM Room r LEFT JOIN Area a ON r.AreaID = a.AreaID
      WHERE r.Visible = 1 AND r.Seat >= @cap
        AND r.RoomID NOT IN (
@@ -80,9 +80,9 @@ async function searchAvailableRooms({ date, startTime, durationMinutes, minSeat,
 
   if (rooms.length === 0) {
     const anyRooms = await query(
-      `SELECT r.RoomID, r.RoomName, r.Seat, a.AreaName
+      `SELECT TOP 3 r.RoomID, r.RoomName, r.Seat, a.AreaName
        FROM Room r LEFT JOIN Area a ON r.AreaID = a.AreaID
-       WHERE r.Visible = 1 AND r.Seat >= @cap ORDER BY r.Seat LIMIT 3`,
+       WHERE r.Visible = 1 AND r.Seat >= @cap ORDER BY r.Seat`,
       { cap }
     );
     return {
@@ -121,14 +121,14 @@ async function bookRoom({ roomID, date, startTime, durationMinutes, title, numbe
 
   if (conflict) {
     const alts = await query(
-      `SELECT r.RoomID, r.RoomName, r.Seat, a.AreaName FROM Room r
+      `SELECT TOP 3 r.RoomID, r.RoomName, r.Seat, a.AreaName FROM Room r
        LEFT JOIN Area a ON r.AreaID = a.AreaID
        WHERE r.Visible=1 AND r.Seat>=@num AND r.RoomID!=@roomID
          AND r.RoomID NOT IN (
            SELECT RoomID FROM LineRoom
            WHERE Status!=3 AND TimeStart<@timeEnd AND TimeEnd>@timeStart
          )
-       ORDER BY r.Seat LIMIT 3`,
+       ORDER BY r.Seat`,
       { num, roomID: parseInt(roomID), timeStart, timeEnd }
     );
     return {
@@ -144,7 +144,7 @@ async function bookRoom({ roomID, date, startTime, durationMinutes, title, numbe
   const status = room.IsVIP === 1 ? 0 : 1;
   const result = await execute(
     `INSERT INTO LineRoom (UserID, RoomID, TimeStart, TimeEnd, Title, NumberPerson, Status, ServiceRequest, CreateDate)
-     VALUES (@userID, @roomID, @timeStart, @timeEnd, @title, @num, @status, @serviceRequest, datetime('now','localtime'))`,
+     VALUES (@userID, @roomID, @timeStart, @timeEnd, @title, @num, @status, @serviceRequest, CONVERT(NVARCHAR(20),GETDATE(),120))`,
     { userID, roomID: parseInt(roomID), timeStart, timeEnd, title: title || 'Cuộc họp', num, status, serviceRequest: serviceRequest || null }
   );
 
@@ -163,7 +163,7 @@ async function getMyBookings({ userID, period }) {
   let timeFilter, orderDir, limitNum, emptyMsg;
 
   if (period === 'past') {
-    timeFilter = `lr.TimeEnd < datetime('now','localtime')`;
+    timeFilter = `lr.TimeEnd < CONVERT(NVARCHAR(20),GETDATE(),120)`;
     orderDir = 'DESC'; limitNum = 15;
     emptyMsg = 'Bạn chưa có lịch đặt phòng nào trong quá khứ.';
   } else if (period === 'all') {
@@ -171,18 +171,18 @@ async function getMyBookings({ userID, period }) {
     orderDir = 'DESC'; limitNum = 20;
     emptyMsg = 'Bạn chưa có lịch đặt phòng nào.';
   } else {
-    timeFilter = `lr.TimeEnd >= datetime('now','localtime') AND lr.Status != 3`;
+    timeFilter = `lr.TimeEnd >= CONVERT(NVARCHAR(20),GETDATE(),120) AND lr.Status != 3`;
     orderDir = 'ASC'; limitNum = 10;
     emptyMsg = 'Bạn chưa có lịch đặt phòng nào sắp tới.';
   }
 
   const rows = await query(
-    `SELECT lr.LineRoomID, lr.Title, lr.TimeStart, lr.TimeEnd, lr.Status, lr.NumberPerson,
+    `SELECT TOP ${limitNum} lr.LineRoomID, lr.Title, lr.TimeStart, lr.TimeEnd, lr.Status, lr.NumberPerson,
             r.RoomName, a.AreaName
      FROM LineRoom lr JOIN Room r ON lr.RoomID = r.RoomID
      LEFT JOIN Area a ON r.AreaID = a.AreaID
      WHERE lr.UserID = @userID AND ${timeFilter}
-     ORDER BY lr.TimeStart ${orderDir} LIMIT ${limitNum}`,
+     ORDER BY lr.TimeStart ${orderDir}`,
     { userID }
   );
 
@@ -217,7 +217,7 @@ async function cancelBooking({ lineRoomID, userID }) {
 async function getAllBookings({ date, status, limit }) {
   const conditions = ['lr.Status != 3'];
   const params = {};
-  if (date) { conditions.push(`date(lr.TimeStart) = @date`); params.date = date; }
+  if (date) { conditions.push(`LEFT(lr.TimeStart,10) = @date`); params.date = date; }
   if (status !== undefined && status !== null && status !== '') {
     const statusMap = { pending: 0, approved: 1, rejected: 2, cancelled: 3 };
     const statusNum = typeof status === 'string' ? (statusMap[status.toLowerCase()] ?? parseInt(status)) : parseInt(status);
@@ -226,14 +226,14 @@ async function getAllBookings({ date, status, limit }) {
     if (statusNum === 0) conditions.splice(conditions.indexOf('lr.Status != 3'), 1);
   }
   const rows = await query(
-    `SELECT lr.LineRoomID, lr.Title, lr.TimeStart, lr.TimeEnd, lr.Status, lr.NumberPerson,
+    `SELECT TOP (@lim) lr.LineRoomID, lr.Title, lr.TimeStart, lr.TimeEnd, lr.Status, lr.NumberPerson,
             r.RoomName, a.AreaName, u.FullName AS BookedBy, u.UserID
      FROM LineRoom lr
      JOIN Room r ON lr.RoomID = r.RoomID
      LEFT JOIN Area a ON r.AreaID = a.AreaID
-     LEFT JOIN "User" u ON lr.UserID = u.UserID
+     LEFT JOIN [User] u ON lr.UserID = u.UserID
      WHERE ${conditions.join(' AND ')}
-     ORDER BY lr.TimeStart DESC LIMIT @lim`,
+     ORDER BY lr.TimeStart DESC`,
     { ...params, lim: parseInt(limit) || 10 }
   );
   if (!rows.length) return { found: false, message: 'Không có lịch đặt nào phù hợp.' };
@@ -256,7 +256,7 @@ async function approveBooking({ lineRoomID, adminID }) {
   if (!lr) return { success: false, error: 'Không tìm thấy lịch đặt' };
   if (lr.Status !== 0) return { success: false, error: `Lịch "${lr.Title}" không ở trạng thái chờ duyệt` };
   await execute(
-    `UPDATE LineRoom SET Status=1, ApprovedBy=@adminID, ApprovedAt=datetime('now','localtime') WHERE LineRoomID=@id`,
+    `UPDATE LineRoom SET Status=1, ApprovedBy=@adminID, ApprovedAt=CONVERT(NVARCHAR(20),GETDATE(),120) WHERE LineRoomID=@id`,
     { id: parseInt(lineRoomID), adminID }
   );
   return { success: true, title: lr.Title, message: `Đã duyệt lịch "${lr.Title}" thành công.` };
@@ -267,7 +267,7 @@ async function rejectBooking({ lineRoomID, adminID }) {
   if (!lr) return { success: false, error: 'Không tìm thấy lịch đặt' };
   if (lr.Status !== 0) return { success: false, error: `Lịch "${lr.Title}" không ở trạng thái chờ duyệt` };
   await execute(
-    `UPDATE LineRoom SET Status=2, ApprovedBy=@adminID, ApprovedAt=datetime('now','localtime') WHERE LineRoomID=@id`,
+    `UPDATE LineRoom SET Status=2, ApprovedBy=@adminID, ApprovedAt=CONVERT(NVARCHAR(20),GETDATE(),120) WHERE LineRoomID=@id`,
     { id: parseInt(lineRoomID), adminID }
   );
   return { success: true, title: lr.Title, message: `Đã từ chối lịch "${lr.Title}".` };
@@ -277,10 +277,10 @@ async function getStatistics({ period }) {
   const pad = n => String(n).padStart(2, '0');
   const now = new Date();
   const todayStr = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
-  let dateFilter = `date(lr.TimeStart) = '${todayStr}'`;
+  let dateFilter = `LEFT(lr.TimeStart,10) = '${todayStr}'`;
   let label = 'hôm nay';
-  if (period === 'week')  { dateFilter = `lr.TimeStart >= datetime('now','-7 days','localtime')`; label = '7 ngày qua'; }
-  if (period === 'month') { dateFilter = `strftime('%Y-%m',lr.TimeStart) = strftime('%Y-%m',datetime('now','localtime'))`; label = 'tháng này'; }
+  if (period === 'week')  { dateFilter = `lr.TimeStart >= CONVERT(NVARCHAR(20),DATEADD(DAY,-7,GETDATE()),120)`; label = '7 ngày qua'; }
+  if (period === 'month') { dateFilter = `LEFT(lr.TimeStart,7) = FORMAT(GETDATE(),'yyyy-MM')`; label = 'tháng này'; }
 
   const [total] = await query(
     `SELECT COUNT(*) AS total,
@@ -291,10 +291,10 @@ async function getStatistics({ period }) {
      FROM LineRoom lr WHERE ${dateFilter}`, {}
   );
   const topRooms = await query(
-    `SELECT r.RoomName, COUNT(*) AS bookingCount
+    `SELECT TOP 3 r.RoomName, COUNT(*) AS bookingCount
      FROM LineRoom lr JOIN Room r ON lr.RoomID = r.RoomID
      WHERE ${dateFilter} AND lr.Status != 3
-     GROUP BY r.RoomID ORDER BY bookingCount DESC LIMIT 3`, {}
+     GROUP BY r.RoomID, r.RoomName ORDER BY bookingCount DESC`, {}
   );
   return {
     period: label,
@@ -309,11 +309,11 @@ async function addRoomTool({ name, areaName, seat, isVIP, description }) {
   if (!seat || seat < 1) return { success: false, error: 'Số chỗ ngồi không hợp lệ' };
   let areaID = null;
   if (areaName) {
-    const area = await queryOne(`SELECT AreaID FROM Area WHERE AreaName LIKE '%' || @name || '%' AND Visible=1 LIMIT 1`, { name: areaName });
+    const area = await queryOne(`SELECT TOP 1 AreaID FROM Area WHERE AreaName LIKE '%' + @name + '%' AND Visible=1`, { name: areaName });
     if (!area) return { success: false, error: `Không tìm thấy khu vực "${areaName}".` };
     areaID = area.AreaID;
   } else {
-    const first = await queryOne(`SELECT AreaID FROM Area WHERE Visible=1 LIMIT 1`, {});
+    const first = await queryOne(`SELECT TOP 1 AreaID FROM Area WHERE Visible=1`, {});
     areaID = first?.AreaID;
   }
   const dup = await queryOne(`SELECT RoomID FROM Room WHERE RoomName=@name AND Visible=1`, { name: name.trim() });
@@ -327,13 +327,13 @@ async function addRoomTool({ name, areaName, seat, isVIP, description }) {
 }
 
 async function getRoomsTool({ search, areaName, isVIP }) {
-  let sql = `SELECT r.RoomID, r.RoomName, r.Seat, r.IsVIP, r.Desc, a.AreaName
+  let sql = `SELECT TOP 20 r.RoomID, r.RoomName, r.Seat, r.IsVIP, r.[Desc], a.AreaName
              FROM Room r LEFT JOIN Area a ON r.AreaID = a.AreaID WHERE r.Visible = 1`;
   const params = {};
-  if (search)                                { sql += ` AND r.RoomName LIKE '%' || @search || '%'`; params.search = search; }
-  if (areaName)                              { sql += ` AND a.AreaName LIKE '%' || @area || '%'`;   params.area = areaName; }
-  if (isVIP !== undefined && isVIP !== null) { sql += ` AND r.IsVIP = @vip`;                        params.vip = isVIP ? 1 : 0; }
-  sql += ` ORDER BY a.AreaName, r.RoomName LIMIT 20`;
+  if (search)                                { sql += ` AND r.RoomName LIKE '%' + @search + '%'`; params.search = search; }
+  if (areaName)                              { sql += ` AND a.AreaName LIKE '%' + @area + '%'`;   params.area = areaName; }
+  if (isVIP !== undefined && isVIP !== null) { sql += ` AND r.IsVIP = @vip`;                       params.vip = isVIP ? 1 : 0; }
+  sql += ` ORDER BY a.AreaName, r.RoomName`;
   const rooms = await query(sql, params);
   if (!rooms.length) return { found: false, message: 'Không tìm thấy phòng nào phù hợp.' };
   return {
@@ -346,7 +346,7 @@ async function getEquipmentTool({ roomName }) {
   if (!roomName?.trim()) return { error: 'Thiếu tên phòng' };
   const room = await queryOne(
     `SELECT r.RoomID, r.RoomName, a.AreaName FROM Room r LEFT JOIN Area a ON r.AreaID = a.AreaID
-     WHERE r.RoomName LIKE '%' || @name || '%' AND r.Visible = 1 LIMIT 1`,
+     WHERE r.RoomName LIKE '%' + @name + '%' AND r.Visible = 1`,
     { name: roomName.trim() }
   );
   if (!room) return { found: false, message: `Không tìm thấy phòng "${roomName}"` };
@@ -366,10 +366,10 @@ async function getUsersTool({ search, limit }) {
              FROM "User" u LEFT JOIN Faculty f ON u.FacultyID = f.FacultyID WHERE u.Visible = 1`;
   const params = {};
   if (search) {
-    sql += ` AND (u.FullName LIKE '%' || @search || '%' OR u.UserID LIKE '%' || @search || '%' OR u.Email LIKE '%' || @search || '%')`;
+    sql += ` AND (u.FullName LIKE '%' + @search + '%' OR u.UserID LIKE '%' + @search + '%' OR u.Email LIKE '%' + @search + '%')`;
     params.search = search;
   }
-  sql += ` ORDER BY u.Roles DESC, u.FullName LIMIT @lim`;
+  sql += ` ORDER BY u.Roles DESC, u.FullName OFFSET 0 ROWS FETCH NEXT @lim ROWS ONLY`;
   params.lim = parseInt(limit) || 15;
   const users = await query(sql, params);
   if (!users.length) return { found: false, message: 'Không tìm thấy người dùng.' };
@@ -714,7 +714,7 @@ Ngắn gọn, tiếng Việt, emoji vừa phải. Ngoài chủ đề: "Tôi ch�
     try {
       await execute(
         `INSERT INTO AI_Chat_Log (UserID, UserMessage, BotReply, AI_JSON, CreateDate)
-         VALUES (@userID, @msg, @reply, @reply, datetime('now','localtime'))`,
+         VALUES (@userID, @msg, @reply, @reply, CONVERT(NVARCHAR(20),GETDATE(),120))`,
         { userID, msg: message, reply: finalReply }
       );
     } catch (_) {}
@@ -747,8 +747,8 @@ const getHistory = async (req, res) => {
     if (!userID) return error(res, 'Chưa xác thực', 401);
     const limit = Math.min(parseInt(req.query.limit) || 50, 200);
     const rows = await query(
-      `SELECT LogID, UserMessage, BotReply, CreateDate FROM AI_Chat_Log
-       WHERE UserID = @userID ORDER BY CreateDate DESC LIMIT @limit`,
+      `SELECT TOP (@limit) LogID, UserMessage, BotReply, CreateDate FROM AI_Chat_Log
+       WHERE UserID = @userID ORDER BY CreateDate DESC`,
       { userID, limit }
     );
     return success(res, rows);

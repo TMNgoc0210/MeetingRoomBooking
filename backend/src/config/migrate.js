@@ -1,289 +1,162 @@
 /**
- * migrate.js — Chạy migration bổ sung các cột/bảng mới vào DB đã có
+ * migrate.js — Bổ sung cột/bảng còn thiếu vào DB SQL Server đã tạo
  * Chạy: node src/config/migrate.js
- * An toàn để chạy nhiều lần (idempotent)
+ * An toàn để chạy nhiều lần (idempotent).
  */
-const Database = require('better-sqlite3');
+const sql = require('mssql');
 const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 
-const dbPath = path.join(__dirname, '../../data/meeting_booking.db');
-const db = new Database(dbPath);
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+const config = {
+  server:   process.env.DB_SERVER   || 'localhost',
+  port:     parseInt(process.env.DB_PORT) || 1433,
+  database: process.env.DB_NAME     || 'MeetingRoomBooking',
+  user:     process.env.DB_USER     || 'sa',
+  password: process.env.DB_PASSWORD || '',
+  options: {
+    encrypt:                process.env.DB_ENCRYPT === 'true',
+    trustServerCertificate: process.env.DB_ENCRYPT !== 'true',
+    enableArithAbort:       true,
+  },
+};
 
-console.log('🚀 Running migrations...');
-
-// Helper: thêm cột nếu chưa tồn tại
-function addColumnIfNotExists(table, column, definition) {
-  const cols = db.pragma(`table_info(${table})`).map(c => c.name);
-  if (!cols.includes(column)) {
-    db.exec(`ALTER TABLE "${table}" ADD COLUMN ${column} ${definition}`);
-    console.log(`  ✅ Added ${table}.${column}`);
+async function addColIfNotExists(pool, table, column, definition) {
+  const res = await pool.request().query(`
+    SELECT COUNT(*) AS c
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_NAME = '${table}' AND COLUMN_NAME = '${column}'
+  `);
+  if (res.recordset[0].c === 0) {
+    await pool.request().query(`ALTER TABLE [${table}] ADD [${column}] ${definition}`);
+    console.log(`  ✅ Added [${table}].[${column}]`);
   } else {
-    console.log(`  ⏭️  ${table}.${column} already exists`);
+    console.log(`  ⏭️  [${table}].[${column}] already exists`);
   }
 }
 
-// Helper: tạo bảng nếu chưa có
-function createTableIfNotExists(sql, tableName) {
-  db.exec(sql);
-  console.log(`  ✅ Table ${tableName} ready`);
-}
+async function main() {
+  const pool = await sql.connect(config);
+  console.log('🚀 Running SQL Server migrations...\n');
 
-// ─── Migration 1: LineRoom — thêm Status, ApprovedBy, ApprovedAt, RecurringGroupID ───
-console.log('\n[1] LineRoom status & approval columns');
-addColumnIfNotExists('LineRoom', 'Status', 'INTEGER DEFAULT 1');
-// Status: 0=Pending, 1=Approved, 2=Rejected, 3=Cancelled
-addColumnIfNotExists('LineRoom', 'ApprovedBy', 'TEXT DEFAULT NULL');
-addColumnIfNotExists('LineRoom', 'ApprovedAt', 'TEXT DEFAULT NULL');
-addColumnIfNotExists('LineRoom', 'RecurringGroupID', 'INTEGER DEFAULT NULL');
-addColumnIfNotExists('LineRoom', 'RecurringType', 'TEXT DEFAULT NULL');
-// RecurringType: null=none, 'daily', 'weekly', 'monthly'
-addColumnIfNotExists('LineRoom', 'RecurringEnd', 'TEXT DEFAULT NULL');
+  await addColIfNotExists(pool, 'LineRoom', 'Status',           'INT DEFAULT 1');
+  await addColIfNotExists(pool, 'LineRoom', 'ApprovedBy',       'NVARCHAR(100) DEFAULT NULL');
+  await addColIfNotExists(pool, 'LineRoom', 'ApprovedAt',       'NVARCHAR(20)  DEFAULT NULL');
+  await addColIfNotExists(pool, 'LineRoom', 'RecurringGroupID', 'INT           DEFAULT NULL');
+  await addColIfNotExists(pool, 'LineRoom', 'RecurringType',    'NVARCHAR(20)  DEFAULT NULL');
+  await addColIfNotExists(pool, 'LineRoom', 'RecurringEnd',     'NVARCHAR(20)  DEFAULT NULL');
+  await addColIfNotExists(pool, 'LineRoom', 'RejectReason',     'NVARCHAR(MAX) DEFAULT NULL');
+  await addColIfNotExists(pool, 'LineRoom', 'ServiceRequest',   'NVARCHAR(MAX) DEFAULT NULL');
+  await addColIfNotExists(pool, 'LineRoom', 'ReminderSent',     'INT           DEFAULT 0');
+  await addColIfNotExists(pool, 'Room',     'IsVIP',            'INT           DEFAULT 0');
+  await addColIfNotExists(pool, 'Room',     'VIPCondition',     'INT           DEFAULT 0');
+  await addColIfNotExists(pool, 'Room',     'VIPMinutes',       'INT           DEFAULT 60');
 
-// ─── Migration 2: Room — thêm IsVIP ───────────────────────────────────────────
-console.log('\n[2] Room.IsVIP column');
-addColumnIfNotExists('Room', 'IsVIP', 'INTEGER DEFAULT 0');
+  // Tạo bảng nếu chưa có
+  await pool.request().query(`
+    IF OBJECT_ID('Equipment','U') IS NULL
+    CREATE TABLE Equipment (
+      EquipmentID INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+      RoomID      INT           NOT NULL REFERENCES Room(RoomID),
+      Name        NVARCHAR(200) NOT NULL,
+      Icon        NVARCHAR(100) DEFAULT 'fa-cube',
+      Quantity    INT           DEFAULT 1,
+      Note        NVARCHAR(MAX) DEFAULT '',
+      Visible     INT           DEFAULT 1
+    )
+  `);
 
-// ─── Migration 3: Bảng Equipment ─────────────────────────────────────────────
-console.log('\n[3] Equipment table');
-createTableIfNotExists(`
-  CREATE TABLE IF NOT EXISTS "Equipment" (
-    EquipmentID  INTEGER PRIMARY KEY AUTOINCREMENT,
-    RoomID       INTEGER NOT NULL REFERENCES Room(RoomID),
-    Name         TEXT    NOT NULL,
-    Icon         TEXT    DEFAULT 'fa-cube',
-    Quantity     INTEGER DEFAULT 1,
-    Note         TEXT    DEFAULT '',
-    Visible      INTEGER DEFAULT 1
-  );
-`, 'Equipment');
+  await pool.request().query(`
+    IF OBJECT_ID('BookingAttendee','U') IS NULL
+    CREATE TABLE BookingAttendee (
+      AttendeeID INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+      LineRoomID INT           NOT NULL REFERENCES LineRoom(LineRoomID),
+      UserID     NVARCHAR(100) NOT NULL REFERENCES [User](UserID),
+      Status     INT           DEFAULT 0,
+      InvitedAt  NVARCHAR(20)  DEFAULT '',
+      CONSTRAINT UC_BookingAttendee UNIQUE (LineRoomID, UserID)
+    )
+  `);
 
-// ─── Migration 4: Bảng BookingAttendee ───────────────────────────────────────
-console.log('\n[4] BookingAttendee table');
-createTableIfNotExists(`
-  CREATE TABLE IF NOT EXISTS "BookingAttendee" (
-    AttendeeID   INTEGER PRIMARY KEY AUTOINCREMENT,
-    LineRoomID   INTEGER NOT NULL REFERENCES LineRoom(LineRoomID) ON DELETE CASCADE,
-    UserID       TEXT    NOT NULL REFERENCES "User"(UserID),
-    Status       INTEGER DEFAULT 0,
-    -- Status: 0=Invited, 1=Accepted, 2=Declined
-    InvitedAt    TEXT    DEFAULT (datetime('now','localtime')),
-    UNIQUE(LineRoomID, UserID)
-  );
-`, 'BookingAttendee');
+  await pool.request().query(`
+    IF OBJECT_ID('BookingAttachment','U') IS NULL
+    CREATE TABLE BookingAttachment (
+      AttachmentID INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+      LineRoomID   INT           NOT NULL REFERENCES LineRoom(LineRoomID),
+      FileName     NVARCHAR(500) NOT NULL,
+      FilePath     NVARCHAR(MAX) NOT NULL,
+      FileSize     INT           DEFAULT 0,
+      MimeType     NVARCHAR(200) DEFAULT '',
+      UploadedAt   NVARCHAR(20)  DEFAULT '',
+      UploadedBy   NVARCHAR(100) DEFAULT ''
+    )
+  `);
 
-// ─── Seed thiết bị mẫu cho các phòng hiện có ─────────────────────────────────
-console.log('\n[5] Seed sample equipment');
-const existingEquip = db.prepare('SELECT COUNT(*) AS c FROM Equipment').get();
-if (existingEquip.c === 0) {
-  const rooms = db.prepare('SELECT RoomID FROM Room WHERE Visible = 1').all();
-  const insertEquip = db.prepare(
-    `INSERT INTO Equipment (RoomID, Name, Icon, Quantity) VALUES (?, ?, ?, ?)`
-  );
-  for (const room of rooms) {
-    insertEquip.run(room.RoomID, 'Máy chiếu', 'fa-desktop', 1);
-    insertEquip.run(room.RoomID, 'Bảng trắng', 'fa-chalkboard', 1);
-    insertEquip.run(room.RoomID, 'Điều hòa', 'fa-wind', 1);
+  await pool.request().query(`
+    IF OBJECT_ID('Setting','U') IS NULL
+    CREATE TABLE Setting ([Key] NVARCHAR(100) NOT NULL PRIMARY KEY, [Value] NVARCHAR(MAX) NOT NULL DEFAULT '')
+  `);
+
+  // Seed settings mặc định
+  for (const [k, v] of [
+    ['timeFormat','24h'],['slotMinutes','30'],['defaultDuration','60'],
+    ['maxDuration','0'],['timezone','Asia/Ho_Chi_Minh'],['theme','dark'],
+    ['workdayStart','07:00'],['workdayEnd','21:00'],
+  ]) {
+    await pool.request().input('k', sql.NVarChar, k).input('v', sql.NVarChar, v).query(`
+      IF NOT EXISTS (SELECT 1 FROM Setting WHERE [Key]=@k)
+        INSERT INTO Setting ([Key],[Value]) VALUES (@k,@v)
+    `);
   }
-  // Phòng đầu tiên thêm thêm thiết bị
-  if (rooms.length > 0) {
-    insertEquip.run(rooms[0].RoomID, 'Micro không dây', 'fa-microphone', 2);
-    insertEquip.run(rooms[0].RoomID, 'Tivi 65 inch', 'fa-tv', 1);
-    insertEquip.run(rooms[0].RoomID, 'Hệ thống loa', 'fa-volume-up', 1);
+
+  await pool.request().query(`
+    IF OBJECT_ID('Role','U') IS NULL
+    CREATE TABLE Role (
+      RoleID      INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+      Name        NVARCHAR(200) NOT NULL CONSTRAINT UC_Role_Name UNIQUE,
+      Description NVARCHAR(MAX) DEFAULT '',
+      CreatedAt   NVARCHAR(20)  DEFAULT ''
+    )
+  `);
+
+  for (const [n, d] of [
+    ['Quản trị ứng dụng',       'Toàn quyền thực hiện các chức năng trong ứng dụng'],
+    ['Người quản lý đặt phòng', 'Có quyền sửa, xóa, phê duyệt đặt phòng của người khác'],
+    ['Người đặt phòng',         'Có quyền cập nhật đặt phòng của chính mình'],
+  ]) {
+    await pool.request().input('n', sql.NVarChar, n).input('d', sql.NVarChar, d).query(`
+      IF NOT EXISTS (SELECT 1 FROM Role WHERE Name=@n)
+        INSERT INTO Role (Name,Description) VALUES (@n,@d)
+    `);
   }
-  console.log('  ✅ Equipment seeded');
-} else {
-  console.log('  ⏭️  Equipment already seeded');
+
+  await pool.request().query(`
+    IF OBJECT_ID('UserRole','U') IS NULL
+    CREATE TABLE UserRole (
+      UserRoleID INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+      UserID     NVARCHAR(100) NOT NULL REFERENCES [User](UserID),
+      RoleID     INT           NOT NULL REFERENCES Role(RoleID),
+      AssignedAt NVARCHAR(20)  DEFAULT '',
+      CONSTRAINT UC_UserRole UNIQUE (UserID, RoleID)
+    )
+  `);
+
+  await pool.request().query(`
+    IF OBJECT_ID('AI_Chat_Log','U') IS NULL
+    CREATE TABLE AI_Chat_Log (
+      LogID       INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+      UserID      NVARCHAR(100) DEFAULT NULL,
+      UserMessage NVARCHAR(MAX) NOT NULL,
+      BotReply    NVARCHAR(MAX) DEFAULT NULL,
+      AI_JSON     NVARCHAR(MAX) DEFAULT NULL,
+      CreateDate  NVARCHAR(20)  DEFAULT ''
+    )
+  `);
+
+  await pool.close();
+  console.log('\n🎉 All migrations completed!');
 }
 
-// ─── Migration 5: LineRoom — thêm RejectReason ───────────────────────────────
-console.log('\n[5b] LineRoom.RejectReason column');
-addColumnIfNotExists('LineRoom', 'RejectReason', 'TEXT DEFAULT NULL');
-
-// ─── Migration 6: LineRoom — ServiceRequest ───────────────────────────────────
-console.log('\n[6] LineRoom.ServiceRequest column');
-addColumnIfNotExists('LineRoom', 'ServiceRequest', 'TEXT DEFAULT NULL');
-
-// ─── Migration 7: Room — VIPCondition, VIPMinutes ────────────────────────────
-console.log('\n[7] Room VIP condition columns');
-addColumnIfNotExists('Room', 'VIPCondition', 'INTEGER DEFAULT 0');
-// 0 = mọi cuộc họp đều cần duyệt, 1 = chỉ cuộc họp > VIPMinutes phút
-addColumnIfNotExists('Room', 'VIPMinutes', 'INTEGER DEFAULT 60');
-
-// ─── Migration 8: BookingAttachment ──────────────────────────────────────────
-console.log('\n[8] BookingAttachment table');
-createTableIfNotExists(`
-  CREATE TABLE IF NOT EXISTS "BookingAttachment" (
-    AttachmentID  INTEGER PRIMARY KEY AUTOINCREMENT,
-    LineRoomID    INTEGER NOT NULL REFERENCES LineRoom(LineRoomID) ON DELETE CASCADE,
-    FileName      TEXT    NOT NULL,
-    FilePath      TEXT    NOT NULL,
-    FileSize      INTEGER DEFAULT 0,
-    MimeType      TEXT    DEFAULT '',
-    UploadedAt    TEXT    DEFAULT (datetime('now','localtime')),
-    UploadedBy    TEXT    DEFAULT ''
-  );
-`, 'BookingAttachment');
-
-// ─── Migration 9: Setting table ──────────────────────────────────────────────
-console.log('\n[9] Setting table');
-db.exec(`
-  CREATE TABLE IF NOT EXISTS "Setting" (
-    "Key"   TEXT PRIMARY KEY,
-    "Value" TEXT NOT NULL DEFAULT ''
-  );
-`);
-// Seed defaults nếu chưa có
-const defaults = [
-  ['timeFormat',       '24h'],
-  ['slotMinutes',      '30'],
-  ['defaultDuration',  '60'],
-  ['maxDuration',      '0'],
-  ['timezone',         'Asia/Ho_Chi_Minh'],
-  ['theme',            'dark'],
-  ['workdayStart',     '07:00'],
-  ['workdayEnd',       '21:00'],
-];
-const upsert = db.prepare(`INSERT OR IGNORE INTO "Setting"("Key","Value") VALUES (?,?)`);
-for (const [k, v] of defaults) upsert.run(k, v);
-console.log('  ✅ Setting table ready');
-
-// ─── Update phòng A101 thành VIP ─────────────────────────────────────────────
-const firstRoom = db.prepare('SELECT RoomID FROM Room LIMIT 1').get();
-if (firstRoom) {
-  db.prepare('UPDATE Room SET IsVIP = 1 WHERE RoomID = ?').run(firstRoom.RoomID);
-  console.log('\n[6] Marked first room as VIP (requires approval)');
-}
-
-// ─── Migration 10b: AI_Chat_Log — thêm UserID + BotReply ─────────────────────
-console.log('\n[10b] AI_Chat_Log columns');
-db.exec(`
-  CREATE TABLE IF NOT EXISTS "AI_Chat_Log" (
-    LogID      INTEGER PRIMARY KEY AUTOINCREMENT,
-    UserID     TEXT    DEFAULT NULL,
-    UserMessage TEXT   NOT NULL,
-    BotReply   TEXT    DEFAULT NULL,
-    AI_JSON    TEXT    DEFAULT NULL,
-    CreateDate TEXT    DEFAULT (datetime('now','localtime'))
-  );
-`);
-addColumnIfNotExists('AI_Chat_Log', 'UserID',   'TEXT DEFAULT NULL');
-addColumnIfNotExists('AI_Chat_Log', 'BotReply', 'TEXT DEFAULT NULL');
-console.log('  ✅ AI_Chat_Log ready');
-
-// ─── Migration 10: Role table ─────────────────────────────────────────────────
-console.log('\n[10] Role table');
-db.exec(`
-  CREATE TABLE IF NOT EXISTS "Role" (
-    RoleID      INTEGER PRIMARY KEY AUTOINCREMENT,
-    Name        TEXT    NOT NULL UNIQUE,
-    Description TEXT    DEFAULT '',
-    CreatedAt   TEXT    DEFAULT (datetime('now','localtime'))
-  );
-`);
-// Seed 3 vai trò mặc định
-const seedRoles = db.prepare(`INSERT OR IGNORE INTO "Role"(Name, Description) VALUES (?,?)`);
-seedRoles.run('Quản trị ứng dụng',     'Toàn quyền thực hiện các chức năng trong ứng dụng');
-seedRoles.run('Người quản lý đặt phòng', 'Có quyền sửa, xóa, phê duyệt đặt phòng của người khác');
-seedRoles.run('Người đặt phòng',       'Có quyền cập nhật đặt phòng của chính mình');
-console.log('  ✅ Role table ready');
-
-// ─── Migration 11b: LineRoom.ReminderSent ────────────────────────────────────
-console.log('\n[11b] LineRoom.ReminderSent column');
-addColumnIfNotExists('LineRoom', 'ReminderSent', 'INTEGER DEFAULT 0');
-
-// ─── Migration 11: UserRole table ─────────────────────────────────────────────
-console.log('\n[11] UserRole table');
-db.exec(`
-  CREATE TABLE IF NOT EXISTS "UserRole" (
-    UserRoleID  INTEGER PRIMARY KEY AUTOINCREMENT,
-    UserID      TEXT    NOT NULL REFERENCES "User"(UserID) ON DELETE CASCADE,
-    RoleID      INTEGER NOT NULL REFERENCES "Role"(RoleID) ON DELETE CASCADE,
-    AssignedAt  TEXT    DEFAULT (datetime('now','localtime')),
-    UNIQUE(UserID, RoleID)
-  );
-`);
-// Gán admin vào vai trò "Quản trị ứng dụng"
-const adminRoleRow = db.prepare(`SELECT RoleID FROM "Role" WHERE Name = 'Quản trị ứng dụng'`).get();
-if (adminRoleRow) {
-  db.prepare(`INSERT OR IGNORE INTO "UserRole" (UserID, RoleID) VALUES (?, ?)`).run('admin', adminRoleRow.RoleID);
-}
-console.log('  ✅ UserRole table ready');
-
-// ─── Migration 12: Update room avatars → Unsplash URLs ───────────────────────
-console.log('\n[12] Room avatars → online images');
-const ROOM_IMAGES = [
-  'https://images.unsplash.com/photo-1497366216548-37526070297c?w=800&h=400&fit=crop',
-  'https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=800&h=400&fit=crop',
-  'https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=800&h=400&fit=crop',
-  'https://images.unsplash.com/photo-1573167507387-6b4b98cb7c13?w=800&h=400&fit=crop',
-  'https://images.unsplash.com/photo-1552664730-d307ca884978?w=800&h=400&fit=crop',
-  'https://images.unsplash.com/photo-1556761175-b413da4baf72?w=800&h=400&fit=crop',
-  'https://images.unsplash.com/photo-1497366412874-3415097a27e7?w=800&h=400&fit=crop',
-  'https://images.unsplash.com/photo-1531973576160-7125cd663d86?w=800&h=400&fit=crop',
-];
-const roomsToUpdate = db.prepare('SELECT RoomID, Avatar FROM Room WHERE Visible=1 ORDER BY RoomID').all();
-const updateAvatar = db.prepare('UPDATE Room SET Avatar=? WHERE RoomID=?');
-roomsToUpdate.forEach((r, i) => {
-  if (!r.Avatar || r.Avatar.startsWith('/uploads/') || r.Avatar === '') {
-    updateAvatar.run(ROOM_IMAGES[i % ROOM_IMAGES.length], r.RoomID);
-    console.log(`  ✅ Updated Room #${r.RoomID} avatar`);
-  } else {
-    console.log(`  ⏭️  Room #${r.RoomID} avatar already set`);
-  }
+main().catch(err => {
+  console.error('❌ Migration failed:', err.message);
+  process.exit(1);
 });
-
-// ─── Migration 13: Seed thêm khoa/đơn vị ─────────────────────────────────────
-console.log('\n[13] Seed additional faculties');
-const insertFacultyM = db.prepare(`INSERT OR IGNORE INTO Faculty (FacultyName, Visible) VALUES (?, 1)`);
-for (const name of [
-  'Khoa Cơ khí - Xây dựng',
-  'Khoa Điện - Điện tử',
-  'Khoa Hóa học - Thực phẩm',
-  'Khoa Quản trị Kinh doanh',
-  'Khoa Ngoại ngữ',
-  'Phòng Hành chính - Nhân sự',
-  'Phòng Tài chính - Kế toán',
-  'Trung tâm Nghiên cứu & Phát triển',
-]) insertFacultyM.run(name);
-console.log('  ✅ Faculties seeded');
-
-// ─── Migration 14: Seed thêm user test ───────────────────────────────────────
-console.log('\n[14] Seed additional test users');
-const bcrypt = require('bcryptjs');
-const hash = bcrypt.hashSync('123456', 10);
-const getFacID = (name) => db.prepare(`SELECT FacultyID FROM Faculty WHERE FacultyName LIKE '%'||?||'%' LIMIT 1`).get(name)?.FacultyID || null;
-
-const newUsers = [
-  ['ngocphan',   'Trần Minh Ngọc',      'minhngocphanme457@gmail.com',    'Công nghệ Thông tin'],
-  ['ngocpro457', 'Nguyễn Minh Pro',      'minhngocpro457@gmail.com',       'Công nghệ Thông tin'],
-  ['ngoctran457','Phan Ngọc Trần Minh',  'minhngocphanmetran457@gmail.com','Kinh tế'],
-  ['user03',     'Lê Văn Cường',         'cuong.le@university.edu.vn',     'Công nghệ Thông tin'],
-  ['user04',     'Phạm Thị Dung',        'dung.pham@university.edu.vn',    'Kinh tế'],
-  ['user05',     'Hoàng Minh Đức',       'duc.hoang@university.edu.vn',    'Đào tạo'],
-  ['user06',     'Nguyễn Thu Hà',        'ha.nguyen@university.edu.vn',    'Công nghệ Thông tin'],
-  ['user07',     'Trần Quốc Hùng',       'hung.tran@university.edu.vn',    'Ban Giám hiệu'],
-  ['user08',     'Lê Thị Kim Lan',       'lan.le@university.edu.vn',       'Cơ khí'],
-  ['user09',     'Vũ Minh Long',         'long.vu@university.edu.vn',      'Điện'],
-  ['user10',     'Đặng Thị Bích Mai',    'mai.dang@university.edu.vn',     'Ngoại ngữ'],
-  ['user11',     'Bùi Quang Nam',        'nam.bui@university.edu.vn',      'Quản trị Kinh doanh'],
-  ['user12',     'Ngô Thị Oanh',         'oanh.ngo@university.edu.vn',     'Hành chính'],
-  ['user13',     'Phạm Văn Phúc',        'phuc.pham@university.edu.vn',    'Tài chính'],
-  ['user14',     'Dương Thị Quỳnh',      'quynh.duong@university.edu.vn',  'Công nghệ Thông tin'],
-  ['user15',     'Hoàng Văn Sơn',        'son.hoang@university.edu.vn',    'Kinh tế'],
-  ['user16',     'Lý Thị Thanh',         'thanh.ly@university.edu.vn',     'Hóa học'],
-  ['user17',     'Đinh Công Tuấn',       'tuan.dinh@university.edu.vn',    'Điện'],
-  ['user18',     'Trịnh Thị Uyên',       'uyen.trinh@university.edu.vn',   'Nghiên cứu'],
-  ['user19',     'Phan Quốc Việt',       'viet.phan@university.edu.vn',    'Quản trị Kinh doanh'],
-  ['user20',     'Mai Thị Xuân',         'xuan.mai@university.edu.vn',     'Ngoại ngữ'],
-];
-const insertUserM = db.prepare(`INSERT OR IGNORE INTO "User" (UserID,FullName,Password,Roles,Visible,FacultyID,Email) VALUES (?,?,?,0,1,?,?)`);
-for (const [id, name, email, facKeyword] of newUsers) {
-  const facID = getFacID(facKeyword);
-  insertUserM.run(id, name, hash, facID, email);
-}
-console.log(`  ✅ ${newUsers.length} users seeded (password: 123456)`);
-
-db.close();
-console.log('\n🎉 All migrations completed!');

@@ -45,7 +45,7 @@ const addFaculty = async (req, res) => {
     const result = await execute(
       `INSERT INTO Faculty (FacultyName, Avatar, [Desc], Visible, CreateBy, CreateDate)
        OUTPUT INSERTED.FacultyID
-       VALUES (@facultyName, @avatar, @desc, @visible, @createBy, GETDATE())`,
+       VALUES (@facultyName, @avatar, @desc, @visible, @createBy, CONVERT(NVARCHAR(20),GETDATE(),120))`,
       {
         facultyName,
         avatar: avatar || '/uploads/images/nopic.png',

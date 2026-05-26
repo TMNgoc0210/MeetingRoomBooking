@@ -19,8 +19,8 @@ async function runReminder() {
        LEFT JOIN Area a ON r.AreaID = a.AreaID
        WHERE lr.Status       = 1
          AND lr.ReminderSent = 0
-         AND datetime(lr.TimeStart) >= datetime('now','localtime','+${REMIND_BEFORE - WINDOW} minutes')
-         AND datetime(lr.TimeStart) <  datetime('now','localtime','+${REMIND_BEFORE + WINDOW} minutes')`,
+         AND lr.TimeStart >= CONVERT(NVARCHAR(20),DATEADD(MINUTE,${REMIND_BEFORE - WINDOW},GETDATE()),120)
+         AND lr.TimeStart <  CONVERT(NVARCHAR(20),DATEADD(MINUTE,${REMIND_BEFORE + WINDOW},GETDATE()),120)`,
       {}
     );
 

@@ -4,7 +4,7 @@ const { success, error } = require('../utils/response');
 /** GET /api/settings — trả về object {key: value} */
 const getSettings = async (req, res) => {
   try {
-    const rows = await query(`SELECT "Key", "Value" FROM "Setting"`, {});
+    const rows = await query(`SELECT [Key], [Value] FROM Setting`, {});
     const data = {};
     for (const r of rows) data[r.Key] = r.Value;
     return success(res, data);
@@ -22,8 +22,10 @@ const updateSettings = async (req, res) => {
     }
     for (const [key, value] of Object.entries(updates)) {
       await execute(
-        `INSERT INTO "Setting"("Key","Value") VALUES (@key, @value)
-         ON CONFLICT("Key") DO UPDATE SET "Value"=excluded."Value"`,
+        `IF EXISTS (SELECT 1 FROM Setting WHERE [Key]=@key)
+           UPDATE Setting SET [Value]=@value WHERE [Key]=@key
+         ELSE
+           INSERT INTO Setting ([Key],[Value]) VALUES (@key,@value)`,
         { key, value: String(value) }
       );
     }

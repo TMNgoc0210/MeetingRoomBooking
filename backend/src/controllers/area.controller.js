@@ -45,7 +45,7 @@ const addArea = async (req, res) => {
     const result = await execute(
       `INSERT INTO Area (AreaName, Avatar, [Desc], Visible, CreateBy, CreateDate)
        OUTPUT INSERTED.AreaID
-       VALUES (@areaName, @avatar, @desc, @visible, @createBy, GETDATE())`,
+       VALUES (@areaName, @avatar, @desc, @visible, @createBy, CONVERT(NVARCHAR(20),GETDATE(),120))`,
       {
         areaName,
         avatar: avatar || '/uploads/images/nopic.png',

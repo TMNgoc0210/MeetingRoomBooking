@@ -8,7 +8,7 @@ const getListRoom = async (req, res) => {
   try {
     const rooms = await query(
       `SELECT r.RoomID, r.RoomName, r.AreaID, r.Seat, r.PhoneCall, r.VideoCall, r.IsVIP,
-              r.VIPCondition, r.VIPMinutes, r.Visible, r.Desc, r.Avatar, r.CreateBy,
+              r.VIPCondition, r.VIPMinutes, r.Visible, r.[Desc], r.Avatar, r.CreateBy,
               a.AreaName
        FROM Room r
        LEFT JOIN Area a ON r.AreaID = a.AreaID
@@ -28,7 +28,7 @@ const getAllRoom = async (req, res) => {
   try {
     const rooms = await query(
       `SELECT r.RoomID, r.RoomName, r.AreaID, r.Seat, r.PhoneCall, r.VideoCall, r.IsVIP,
-              r.VIPCondition, r.VIPMinutes, r.Visible, r.Desc, r.Avatar, r.CreateBy,
+              r.VIPCondition, r.VIPMinutes, r.Visible, r.[Desc], r.Avatar, r.CreateBy,
               a.AreaName
        FROM Room r
        LEFT JOIN Area a ON r.AreaID = a.AreaID
@@ -47,7 +47,7 @@ const getDetailRoom = async (req, res) => {
   try {
     const room = await queryOne(
       `SELECT r.RoomID, r.RoomName, r.AreaID, r.Seat, r.PhoneCall, r.VideoCall, r.IsVIP,
-              r.VIPCondition, r.VIPMinutes, r.Visible, r.Desc, r.Avatar, r.CreateBy,
+              r.VIPCondition, r.VIPMinutes, r.Visible, r.[Desc], r.Avatar, r.CreateBy,
               a.AreaName
        FROM Room r
        LEFT JOIN Area a ON r.AreaID = a.AreaID
@@ -87,7 +87,7 @@ const searchRoom = async (req, res) => {
     const { roomName, areaID } = req.query;
     let sql = `
       SELECT r.RoomID, r.RoomName, r.AreaID, r.Seat, r.PhoneCall, r.VideoCall, r.IsVIP,
-             r.VIPCondition, r.VIPMinutes, r.Visible, r.Desc, r.Avatar, a.AreaName
+             r.VIPCondition, r.VIPMinutes, r.Visible, r.[Desc], r.Avatar, a.AreaName
       FROM Room r
       LEFT JOIN Area a ON r.AreaID = a.AreaID
       WHERE r.Visible = 1
@@ -95,7 +95,7 @@ const searchRoom = async (req, res) => {
     const params = {};
 
     if (roomName) {
-      sql += ` AND r.RoomName LIKE '%' || @roomName || '%'`;
+      sql += ` AND r.RoomName LIKE '%' + @roomName + '%'`;
       params.roomName = roomName;
     }
     if (areaID && parseInt(areaID) > 0) {
@@ -119,7 +119,7 @@ const searchAllRoom = async (req, res) => {
     const { roomName, areaID } = req.query;
     let sql = `
       SELECT r.RoomID, r.RoomName, r.AreaID, r.Seat, r.PhoneCall, r.VideoCall, r.IsVIP,
-             r.VIPCondition, r.VIPMinutes, r.Visible, r.Desc, r.Avatar, a.AreaName
+             r.VIPCondition, r.VIPMinutes, r.Visible, r.[Desc], r.Avatar, a.AreaName
       FROM Room r
       LEFT JOIN Area a ON r.AreaID = a.AreaID
       WHERE 1=1
@@ -127,7 +127,7 @@ const searchAllRoom = async (req, res) => {
     const params = {};
 
     if (roomName) {
-      sql += ` AND r.RoomName LIKE '%' || @roomName || '%'`;
+      sql += ` AND r.RoomName LIKE '%' + @roomName + '%'`;
       params.roomName = roomName;
     }
     if (areaID && parseInt(areaID) > 0) {
@@ -152,8 +152,8 @@ const addRoom = async (req, res) => {
     if (!roomName || !areaID) return badRequest(res, 'Thiếu tên phòng hoặc khu vực');
 
     const result = await execute(
-      `INSERT INTO Room (RoomName, AreaID, Seat, PhoneCall, VideoCall, IsVIP, VIPCondition, VIPMinutes, Visible, "Desc", Avatar, CreateBy, CreateDate)
-       VALUES (@roomName, @areaID, @seat, @phoneCall, @videoCall, @isVIP, @vipCondition, @vipMinutes, @visible, @desc, @avatar, @createBy, datetime('now','localtime'))`,
+      `INSERT INTO Room (RoomName, AreaID, Seat, PhoneCall, VideoCall, IsVIP, VIPCondition, VIPMinutes, Visible, [Desc], Avatar, CreateBy, CreateDate)
+       VALUES (@roomName, @areaID, @seat, @phoneCall, @videoCall, @isVIP, @vipCondition, @vipMinutes, @visible, @desc, @avatar, @createBy, CONVERT(NVARCHAR(20),GETDATE(),120))`,
       {
         roomName,
         areaID: parseInt(areaID),
@@ -189,7 +189,7 @@ const updateRoom = async (req, res) => {
          RoomName = @roomName, AreaID = @areaID, Seat = @seat,
          PhoneCall = @phoneCall, VideoCall = @videoCall, IsVIP = @isVIP,
          VIPCondition = @vipCondition, VIPMinutes = @vipMinutes,
-         Visible = @visible, "Desc" = @desc, Avatar = @avatar, CreateBy = @createBy
+         Visible = @visible, [Desc] = @desc, Avatar = @avatar, CreateBy = @createBy
        WHERE RoomID = @roomID`,
       {
         roomName,

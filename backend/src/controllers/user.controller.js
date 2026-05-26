@@ -14,14 +14,15 @@ async function syncUserRoles(userID, roleIDs) {
   await execute(`DELETE FROM "UserRole" WHERE UserID = @userID`, { userID });
   for (const rid of roleIDs) {
     await execute(
-      `INSERT OR IGNORE INTO "UserRole" (UserID, RoleID) VALUES (@userID, @roleID)`,
+      `IF NOT EXISTS (SELECT 1 FROM UserRole WHERE UserID=@userID AND RoleID=@roleID)
+       INSERT INTO UserRole (UserID, RoleID) VALUES (@userID, @roleID)`,
       { userID, roleID: parseInt(rid) }
     );
   }
 }
 
-const ROLE_SUBQUERY = `(SELECT GROUP_CONCAT(ur.RoleID || ':' || r.Name, '|')
-  FROM "UserRole" ur JOIN "Role" r ON ur.RoleID = r.RoleID
+const ROLE_SUBQUERY = `(SELECT STRING_AGG(CAST(ur.RoleID AS NVARCHAR) + ':' + r.Name, '|')
+  FROM UserRole ur JOIN Role r ON ur.RoleID = r.RoleID
   WHERE ur.UserID = u.UserID) AS _roleStr`;
 
 function attachRoles(user) {
@@ -152,7 +153,7 @@ const addUser = async (req, res) => {
 
     await execute(
       `INSERT INTO [User] (UserID, FullName, FacultyID, Mobi, Email, Visible, Roles, Password, Avatar, CreateBy, CreateDate)
-       VALUES (@userID, @fullName, @facultyID, @mobi, @email, @visible, @roles, @password, @avatar, @createBy, GETDATE())`,
+       VALUES (@userID, @fullName, @facultyID, @mobi, @email, @visible, @roles, @password, @avatar, @createBy, CONVERT(NVARCHAR(20),GETDATE(),120))`,
       {
         userID,
         fullName,

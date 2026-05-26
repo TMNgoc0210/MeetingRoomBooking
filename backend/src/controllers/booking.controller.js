@@ -72,7 +72,7 @@ const bookRoom = async (req, res) => {
         `INSERT INTO LineRoom
            (UserID, FacultyID, RoomID, TimeStart, TimeEnd, Title, Content, Note, ServiceRequest, NumberPerson, Status, RecurringGroupID, RecurringType, RecurringEnd, CreateDate)
          VALUES
-           (@userID, @facultyID, @roomID, @timeStart, @timeEnd, @title, @content, @note, @serviceRequest, @numberPerson, @status, @recurringGroupID, @recurringType, @recurringEnd, datetime('now','localtime'))`,
+           (@userID, @facultyID, @roomID, @timeStart, @timeEnd, @title, @content, @note, @serviceRequest, @numberPerson, @status, @recurringGroupID, @recurringType, @recurringEnd, CONVERT(NVARCHAR(20),GETDATE(),120))`,
         {
           userID,
           facultyID: parseInt(facultyID) || null,
@@ -100,7 +100,8 @@ const bookRoom = async (req, res) => {
           if (aUserID === userID) continue;
           try {
             await execute(
-              `INSERT OR IGNORE INTO BookingAttendee (LineRoomID, UserID, Status) VALUES (@lineRoomID, @aUserID, 0)`,
+              `IF NOT EXISTS (SELECT 1 FROM BookingAttendee WHERE LineRoomID=@lineRoomID AND UserID=@aUserID)
+               INSERT INTO BookingAttendee (LineRoomID, UserID, Status) VALUES (@lineRoomID, @aUserID, 0)`,
               { lineRoomID, aUserID }
             );
           } catch (_) { /* ignore duplicate */ }
@@ -180,7 +181,7 @@ const approveBooking = async (req, res) => {
     if (booking.Status !== STATUS.PENDING) return badRequest(res, 'Lịch này không ở trạng thái chờ duyệt');
 
     await execute(
-      `UPDATE LineRoom SET Status=@status, ApprovedBy=@approvedBy, ApprovedAt=datetime('now','localtime')
+      `UPDATE LineRoom SET Status=@status, ApprovedBy=@approvedBy, ApprovedAt=CONVERT(NVARCHAR(20),GETDATE(),120)
        WHERE LineRoomID = @lineRoomID`,
       { status: STATUS.APPROVED, approvedBy: req.user.userID, lineRoomID }
     );
@@ -204,7 +205,7 @@ const rejectBooking = async (req, res) => {
     if (!reason || !reason.trim()) return badRequest(res, 'Vui lòng nhập lý do từ chối');
 
     await execute(
-      `UPDATE LineRoom SET Status=@status, ApprovedBy=@approvedBy, ApprovedAt=datetime('now','localtime'),
+      `UPDATE LineRoom SET Status=@status, ApprovedBy=@approvedBy, ApprovedAt=CONVERT(NVARCHAR(20),GETDATE(),120),
          RejectReason=@reason
        WHERE LineRoomID = @lineRoomID`,
       { status: STATUS.REJECTED, approvedBy: req.user.userID, reason: reason.trim(), lineRoomID }

@@ -28,7 +28,7 @@ const getDataChart = async (req, res) => {
       weekStart.setDate(weekStart.getDate() + 7);
     }
 
-    // SQLite: dùng strftime thay vì MONTH()/YEAR()
+    // Dùng LIKE prefix vì TimeStart lưu dạng NVARCHAR 'YYYY-MM-DD HH:MM:SS'
     const monthStr = String(month).padStart(2, '0');
     const prefix = `${year}-${monthStr}`;
     let sql = `SELECT TimeStart FROM LineRoom WHERE TimeStart LIKE @prefix`;
@@ -69,7 +69,7 @@ const getSummary = async (req, res) => {
     const [totalBookings] = await query(`SELECT COUNT(*) AS total FROM LineRoom`);
     const [todayBookings] = await query(
       `SELECT COUNT(*) AS total FROM LineRoom
-       WHERE date(TimeStart) = date('now','localtime')`
+       WHERE LEFT(TimeStart,10) = CONVERT(NVARCHAR(10),GETDATE(),120)`
     );
 
     return success(res, {
@@ -98,7 +98,7 @@ const getRoomUsage = async (req, res) => {
 
     const rows = await query(
       `SELECT r.RoomName, COUNT(lr.LineRoomID) AS bookingCount,
-              SUM(CAST((strftime('%s', lr.TimeEnd) - strftime('%s', lr.TimeStart)) AS REAL) / 3600) AS totalHours
+              SUM(DATEDIFF(MINUTE, CAST(lr.TimeStart AS DATETIME2), CAST(lr.TimeEnd AS DATETIME2)) / 60.0) AS totalHours
        FROM Room r
        LEFT JOIN LineRoom lr ON r.RoomID = lr.RoomID AND lr.TimeStart LIKE @prefix
        WHERE r.Visible = 1

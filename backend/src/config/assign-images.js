@@ -1,64 +1,61 @@
-const Database = require('better-sqlite3');
+/**
+ * assign-images.js — Copy ảnh từ thư mục 'anh' và gán vào các phòng trong CSDL
+ * Chạy: node src/config/assign-images.js
+ */
+const sql = require('mssql');
 const path = require('path');
 const fs = require('fs');
+require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 
-// Đường dẫn
-const rootDir = path.join(__dirname, '../../../'); // Thư mục gốc DoAn2026
-const sourceDir = path.join(rootDir, 'anh'); // d:\DoAn2026\anh
-const uploadDir = path.join(__dirname, '../../uploads/images'); // d:\DoAn2026\backend\uploads\images
-const dbPath = path.join(__dirname, '../../data/meeting_booking.db');
+const sourceDir = path.join(__dirname, '../../../anh');
+const uploadDir = path.join(__dirname, '../../uploads/images');
 
-// Tạo thư mục uploads nếu chưa có
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
-// Lấy danh sách các ảnh từ thư mục 'anh'
 let sourceImages = [];
 if (fs.existsSync(sourceDir)) {
-  sourceImages = fs.readdirSync(sourceDir).filter(file => file.startsWith('hop') && file.endsWith('.jpg'));
+  sourceImages = fs.readdirSync(sourceDir).filter(f => f.startsWith('hop') && f.endsWith('.jpg'));
 }
-
 if (sourceImages.length === 0) {
-  console.log('❌ Không tìm thấy ảnh nào bắt đầu bằng "hop" trong thư mục:', sourceDir);
+  console.log('❌ Không tìm thấy ảnh "hop*.jpg" trong:', sourceDir);
   process.exit(1);
 }
-
-// Sắp xếp ảnh theo số: hop1.jpg, hop2.jpg...
 sourceImages.sort((a, b) => {
-  const numA = parseInt(a.replace('hop', '').replace('.jpg', ''));
-  const numB = parseInt(b.replace('hop', '').replace('.jpg', ''));
-  return numA - numB;
+  const n = s => parseInt(s.replace('hop', '').replace('.jpg', ''));
+  return n(a) - n(b);
 });
 
-// Copy file ảnh sang uploads
-console.log('⏳ Đang copy ảnh vào thư mục uploads/images...');
+console.log('⏳ Đang copy ảnh...');
 sourceImages.forEach(img => {
   fs.copyFileSync(path.join(sourceDir, img), path.join(uploadDir, img));
   console.log(`  - Đã copy ${img}`);
 });
 
-// Kết nối DB
-const db = new Database(dbPath);
+async function main() {
+  const pool = await sql.connect({
+    server:   process.env.DB_SERVER   || 'localhost',
+    port:     parseInt(process.env.DB_PORT) || 1433,
+    database: process.env.DB_NAME     || 'MeetingRoomBooking',
+    user:     process.env.DB_USER     || 'sa',
+    password: process.env.DB_PASSWORD || '',
+    options:  { encrypt: false, trustServerCertificate: true },
+  });
 
-// Cập nhật Database
-console.log('\n⏳ Đang cập nhật ảnh cho các phòng trong CSDL...');
-const rooms = db.prepare('SELECT RoomID, RoomName FROM Room ORDER BY RoomID').all();
+  console.log('\n⏳ Đang cập nhật ảnh cho phòng...');
+  const rooms = await pool.request().query('SELECT RoomID, RoomName FROM Room ORDER BY RoomID');
+  let i = 0;
+  for (const room of rooms.recordset) {
+    const avatarPath = `/uploads/images/${sourceImages[i % sourceImages.length]}`;
+    await pool.request()
+      .input('path', sql.NVarChar, avatarPath)
+      .input('id',   sql.Int,     room.RoomID)
+      .query('UPDATE Room SET Avatar=@path WHERE RoomID=@id');
+    console.log(`  - [${room.RoomName}] → ${avatarPath}`);
+    i++;
+  }
 
-const updateRoom = db.prepare('UPDATE Room SET Avatar = ? WHERE RoomID = ?');
-let imageIndex = 0;
+  await pool.close();
+  console.log('\n🎉 Hoàn tất!');
+}
 
-rooms.forEach(room => {
-  // Lấy ảnh vòng lặp (nếu có 9 ảnh mà > 9 phòng thì quay lại ảnh đầu)
-  const imgName = sourceImages[imageIndex % sourceImages.length];
-  const avatarPath = `/uploads/images/${imgName}`;
-  
-  updateRoom.run(avatarPath, room.RoomID);
-  console.log(`  - Phòng [${room.RoomName}] được gán ảnh: ${avatarPath}`);
-  
-  imageIndex++;
-});
-
-db.close();
-console.log('\n🎉 Hoàn tất! Tất cả các phòng đã được cập nhật ảnh.');
-console.log('💡 Mẹo: Hãy ra trình duyệt và nhấn F5 tải lại trang để xem thành quả nhé!');
+main().catch(err => { console.error('❌', err.message); process.exit(1); });

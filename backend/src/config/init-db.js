@@ -1,333 +1,437 @@
 /**
- * init-db.js — Tạo schema SQLite đầy đủ và seed dữ liệu mẫu
+ * init-db.js — Tạo schema SQL Server và seed dữ liệu mẫu
  * Chạy: node src/config/init-db.js
- * Lưu ý: script này XÓA và tạo lại toàn bộ DB nếu chạy lại.
+ * Lưu ý: bỏ qua seed nếu đã có data (idempotent về dữ liệu).
  */
-const Database = require('better-sqlite3');
-const path = require('path');
-const fs = require('fs');
+const sql = require('mssql');
 const bcrypt = require('bcryptjs');
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 
-const dbDir = path.join(__dirname, '../../data');
-if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
+const DB_NAME = process.env.DB_NAME || 'MeetingRoomBooking';
 
-const dbPath = path.join(dbDir, 'meeting_booking.db');
-const db = new Database(dbPath);
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
-
-console.log('📦 Initializing SQLite database...');
-
-// ═══════════════════════════════════════════════════════
-// SCHEMA ĐẦY ĐỦ (bao gồm tất cả migrations)
-// ═══════════════════════════════════════════════════════
-db.exec(`
-  CREATE TABLE IF NOT EXISTS "Faculty" (
-    FacultyID   INTEGER PRIMARY KEY AUTOINCREMENT,
-    FacultyName TEXT    NOT NULL,
-    Avatar      TEXT    DEFAULT '',
-    "Desc"      TEXT    DEFAULT '',
-    Visible     INTEGER DEFAULT 1,
-    CreateDate  TEXT    DEFAULT (datetime('now','localtime')),
-    CreateBy    TEXT    DEFAULT 'admin'
-  );
-
-  CREATE TABLE IF NOT EXISTS "User" (
-    UserID      TEXT    PRIMARY KEY,
-    FullName    TEXT    NOT NULL,
-    Password    TEXT    NOT NULL,
-    FacultyID   INTEGER REFERENCES Faculty(FacultyID),
-    Mobi        TEXT    DEFAULT '',
-    Email       TEXT    DEFAULT '',
-    Avatar      TEXT    DEFAULT '/uploads/images/nopic.png',
-    Visible     INTEGER DEFAULT 1,
-    Roles       INTEGER DEFAULT 0,
-    CreateDate  TEXT    DEFAULT (datetime('now','localtime')),
-    CreateBy    TEXT    DEFAULT 'admin'
-  );
-
-  CREATE TABLE IF NOT EXISTS "Area" (
-    AreaID      INTEGER PRIMARY KEY AUTOINCREMENT,
-    AreaName    TEXT    NOT NULL,
-    Avatar      TEXT    DEFAULT '',
-    "Desc"      TEXT    DEFAULT '',
-    Visible     INTEGER DEFAULT 1,
-    CreateDate  TEXT    DEFAULT (datetime('now','localtime')),
-    CreateBy    TEXT    DEFAULT 'admin'
-  );
-
-  CREATE TABLE IF NOT EXISTS "Room" (
-    RoomID       INTEGER PRIMARY KEY AUTOINCREMENT,
-    RoomName     TEXT    NOT NULL,
-    AreaID       INTEGER REFERENCES Area(AreaID),
-    Seat         INTEGER DEFAULT 10,
-    PhoneCall    INTEGER DEFAULT 0,
-    VideoCall    INTEGER DEFAULT 0,
-    IsVIP        INTEGER DEFAULT 0,
-    VIPCondition INTEGER DEFAULT 0,
-    VIPMinutes   INTEGER DEFAULT 60,
-    Visible      INTEGER DEFAULT 1,
-    "Desc"       TEXT    DEFAULT '',
-    Avatar       TEXT    DEFAULT '',
-    CreateDate   TEXT    DEFAULT (datetime('now','localtime')),
-    CreateBy     TEXT    DEFAULT 'admin'
-  );
-
-  CREATE TABLE IF NOT EXISTS "Equipment" (
-    EquipmentID  INTEGER PRIMARY KEY AUTOINCREMENT,
-    RoomID       INTEGER NOT NULL REFERENCES Room(RoomID),
-    Name         TEXT    NOT NULL,
-    Icon         TEXT    DEFAULT 'fa-cube',
-    Quantity     INTEGER DEFAULT 1,
-    Note         TEXT    DEFAULT '',
-    Visible      INTEGER DEFAULT 1
-  );
-
-  CREATE TABLE IF NOT EXISTS "Booking" (
-    BookingID   INTEGER PRIMARY KEY AUTOINCREMENT,
-    UserID      TEXT    REFERENCES "User"(UserID),
-    CreateDate  TEXT    DEFAULT (datetime('now','localtime'))
-  );
-
-  CREATE TABLE IF NOT EXISTS "LineRoom" (
-    LineRoomID       INTEGER PRIMARY KEY AUTOINCREMENT,
-    BookingID        INTEGER REFERENCES Booking(BookingID),
-    UserID           TEXT    REFERENCES "User"(UserID),
-    FacultyID        INTEGER REFERENCES Faculty(FacultyID),
-    RoomID           INTEGER REFERENCES Room(RoomID),
-    TimeStart        TEXT    NOT NULL,
-    TimeEnd          TEXT    NOT NULL,
-    Title            TEXT    DEFAULT '',
-    Content          TEXT    DEFAULT '',
-    Note             TEXT    DEFAULT '',
-    NumberPerson     INTEGER DEFAULT 1,
-    Status           INTEGER DEFAULT 1,
-    ApprovedBy       TEXT    DEFAULT NULL,
-    ApprovedAt       TEXT    DEFAULT NULL,
-    RejectReason     TEXT    DEFAULT NULL,
-    ServiceRequest   TEXT    DEFAULT NULL,
-    RecurringGroupID INTEGER DEFAULT NULL,
-    RecurringType    TEXT    DEFAULT NULL,
-    RecurringEnd     TEXT    DEFAULT NULL,
-    ReminderSent     INTEGER DEFAULT 0,
-    CreateDate       TEXT    DEFAULT (datetime('now','localtime'))
-  );
-
-  CREATE TABLE IF NOT EXISTS "BookingAttendee" (
-    AttendeeID  INTEGER PRIMARY KEY AUTOINCREMENT,
-    LineRoomID  INTEGER NOT NULL REFERENCES LineRoom(LineRoomID) ON DELETE CASCADE,
-    UserID      TEXT    NOT NULL REFERENCES "User"(UserID),
-    Status      INTEGER DEFAULT 0,
-    InvitedAt   TEXT    DEFAULT (datetime('now','localtime')),
-    UNIQUE(LineRoomID, UserID)
-  );
-
-  CREATE TABLE IF NOT EXISTS "BookingAttachment" (
-    AttachmentID  INTEGER PRIMARY KEY AUTOINCREMENT,
-    LineRoomID    INTEGER NOT NULL REFERENCES LineRoom(LineRoomID) ON DELETE CASCADE,
-    FileName      TEXT    NOT NULL,
-    FilePath      TEXT    NOT NULL,
-    FileSize      INTEGER DEFAULT 0,
-    MimeType      TEXT    DEFAULT '',
-    UploadedAt    TEXT    DEFAULT (datetime('now','localtime')),
-    UploadedBy    TEXT    DEFAULT ''
-  );
-
-  CREATE TABLE IF NOT EXISTS "Role" (
-    RoleID      INTEGER PRIMARY KEY AUTOINCREMENT,
-    Name        TEXT    NOT NULL UNIQUE,
-    Description TEXT    DEFAULT '',
-    CreatedAt   TEXT    DEFAULT (datetime('now','localtime'))
-  );
-
-  CREATE TABLE IF NOT EXISTS "UserRole" (
-    UserRoleID  INTEGER PRIMARY KEY AUTOINCREMENT,
-    UserID      TEXT    NOT NULL REFERENCES "User"(UserID) ON DELETE CASCADE,
-    RoleID      INTEGER NOT NULL REFERENCES "Role"(RoleID) ON DELETE CASCADE,
-    AssignedAt  TEXT    DEFAULT (datetime('now','localtime')),
-    UNIQUE(UserID, RoleID)
-  );
-
-  CREATE TABLE IF NOT EXISTS "Setting" (
-    "Key"   TEXT PRIMARY KEY,
-    "Value" TEXT NOT NULL DEFAULT ''
-  );
-
-  CREATE TABLE IF NOT EXISTS "AI_Chat_Log" (
-    LogID       INTEGER PRIMARY KEY AUTOINCREMENT,
-    UserID      TEXT    DEFAULT NULL,
-    UserMessage TEXT    NOT NULL,
-    BotReply    TEXT    DEFAULT NULL,
-    AI_JSON     TEXT    DEFAULT NULL,
-    CreateDate  TEXT    DEFAULT (datetime('now','localtime'))
-  );
-`);
-
-// ─── Check đã seed chưa ──────────────────────────────────────────────────────
-const userCount = db.prepare('SELECT COUNT(*) as c FROM "User"').get();
-if (userCount.c > 0) {
-  console.log('✅ Database already seeded, skipping...');
-  db.close();
-  process.exit(0);
-}
-
-// ═══════════════════════════════════════════════════════
-// SEED DATA
-// ═══════════════════════════════════════════════════════
-
-// ─── Faculties ───────────────────────────────────────────────────────────────
-const insertFaculty = db.prepare(`INSERT INTO Faculty (FacultyName, Visible) VALUES (?, 1)`);
-const f1  = insertFaculty.run('Khoa Công nghệ Thông tin').lastInsertRowid;
-const f2  = insertFaculty.run('Khoa Kinh tế').lastInsertRowid;
-const f3  = insertFaculty.run('Phòng Đào tạo').lastInsertRowid;
-const f4  = insertFaculty.run('Ban Giám hiệu').lastInsertRowid;
-const f5  = insertFaculty.run('Khoa Cơ khí - Xây dựng').lastInsertRowid;
-const f6  = insertFaculty.run('Khoa Điện - Điện tử').lastInsertRowid;
-const f7  = insertFaculty.run('Khoa Hóa học - Thực phẩm').lastInsertRowid;
-const f8  = insertFaculty.run('Khoa Quản trị Kinh doanh').lastInsertRowid;
-const f9  = insertFaculty.run('Khoa Ngoại ngữ').lastInsertRowid;
-const f10 = insertFaculty.run('Phòng Hành chính - Nhân sự').lastInsertRowid;
-const f11 = insertFaculty.run('Phòng Tài chính - Kế toán').lastInsertRowid;
-const f12 = insertFaculty.run('Trung tâm Nghiên cứu & Phát triển').lastInsertRowid;
-console.log('✅ Faculties seeded');
-
-// ─── Users ───────────────────────────────────────────────────────────────────
-const insertUser = db.prepare(
-  `INSERT INTO "User" (UserID, FullName, Password, Roles, Visible, FacultyID, Email, Mobi)
-   VALUES (?, ?, ?, ?, 1, ?, ?, ?)`
-);
-const h = (p) => bcrypt.hashSync(p, 10);
-insertUser.run('admin',      'Quản trị viên',         h('admin123'), 1, f4,  'admin@university.edu.vn',              '');
-insertUser.run('user01',     'Nguyễn Văn An',          h('123456'),  0, f1,  'an.nguyen@university.edu.vn',          '');
-insertUser.run('user02',     'Trần Thị Bình',          h('123456'),  0, f2,  'binh.tran@university.edu.vn',          '');
-insertUser.run('ngocphan',   'Trần Minh Ngọc',         h('123456'),  0, f1,  'minhngocphanme457@gmail.com',          '');
-insertUser.run('ngocpro457', 'Nguyễn Minh Pro',        h('123456'),  0, f1,  'minhngocpro457@gmail.com',             '');
-insertUser.run('ngoctran457','Phan Ngọc Trần Minh',    h('123456'),  0, f2,  'minhngocphanmetran457@gmail.com',      '');
-insertUser.run('user03',     'Lê Văn Cường',           h('123456'),  0, f1,  'cuong.le@university.edu.vn',           '');
-insertUser.run('user04',     'Phạm Thị Dung',          h('123456'),  0, f2,  'dung.pham@university.edu.vn',          '');
-insertUser.run('user05',     'Hoàng Minh Đức',         h('123456'),  0, f3,  'duc.hoang@university.edu.vn',          '');
-insertUser.run('user06',     'Nguyễn Thu Hà',          h('123456'),  0, f1,  'ha.nguyen@university.edu.vn',          '');
-insertUser.run('user07',     'Trần Quốc Hùng',         h('123456'),  0, f4,  'hung.tran@university.edu.vn',          '');
-insertUser.run('user08',     'Lê Thị Kim Lan',         h('123456'),  0, f5,  'lan.le@university.edu.vn',             '');
-insertUser.run('user09',     'Vũ Minh Long',           h('123456'),  0, f6,  'long.vu@university.edu.vn',            '');
-insertUser.run('user10',     'Đặng Thị Bích Mai',      h('123456'),  0, f9,  'mai.dang@university.edu.vn',           '');
-insertUser.run('user11',     'Bùi Quang Nam',          h('123456'),  0, f8,  'nam.bui@university.edu.vn',            '');
-insertUser.run('user12',     'Ngô Thị Oanh',           h('123456'),  0, f10, 'oanh.ngo@university.edu.vn',           '');
-insertUser.run('user13',     'Phạm Văn Phúc',          h('123456'),  0, f11, 'phuc.pham@university.edu.vn',          '');
-insertUser.run('user14',     'Dương Thị Quỳnh',        h('123456'),  0, f1,  'quynh.duong@university.edu.vn',        '');
-insertUser.run('user15',     'Hoàng Văn Sơn',          h('123456'),  0, f2,  'son.hoang@university.edu.vn',          '');
-insertUser.run('user16',     'Lý Thị Thanh',           h('123456'),  0, f7,  'thanh.ly@university.edu.vn',           '');
-insertUser.run('user17',     'Đinh Công Tuấn',         h('123456'),  0, f6,  'tuan.dinh@university.edu.vn',          '');
-insertUser.run('user18',     'Trịnh Thị Uyên',         h('123456'),  0, f12, 'uyen.trinh@university.edu.vn',         '');
-insertUser.run('user19',     'Phan Quốc Việt',         h('123456'),  0, f8,  'viet.phan@university.edu.vn',          '');
-insertUser.run('user20',     'Mai Thị Xuân',           h('123456'),  0, f9,  'xuan.mai@university.edu.vn',           '');
-console.log('✅ Users seeded (admin/admin123, user01-20/123456, ngocphan|ngocpro457|ngoctran457/123456)');
-
-// ─── Areas ───────────────────────────────────────────────────────────────────
-const insertArea = db.prepare(`INSERT INTO Area (AreaName, Visible) VALUES (?, 1)`);
-const a1 = insertArea.run('Khu A - Tòa nhà chính').lastInsertRowid;
-const a2 = insertArea.run('Khu B - Thư viện').lastInsertRowid;
-const a3 = insertArea.run('Khu C - Phòng thí nghiệm').lastInsertRowid;
-console.log('✅ Areas seeded');
-
-// ─── Rooms (8 phòng) ─────────────────────────────────────────────────────────
-const insertRoom = db.prepare(
-  `INSERT INTO Room (RoomName, AreaID, Seat, PhoneCall, VideoCall, IsVIP, VIPCondition, VIPMinutes, Visible, "Desc", Avatar)
-   VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`
-);
-
-const IMG = [
-  'https://images.unsplash.com/photo-1497366216548-37526070297c?w=800&h=400&fit=crop',
-  'https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=800&h=400&fit=crop',
-  'https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=800&h=400&fit=crop',
-  'https://images.unsplash.com/photo-1573167507387-6b4b98cb7c13?w=800&h=400&fit=crop',
-  'https://images.unsplash.com/photo-1552664730-d307ca884978?w=800&h=400&fit=crop',
-  'https://images.unsplash.com/photo-1556761175-b413da4baf72?w=800&h=400&fit=crop',
-  'https://images.unsplash.com/photo-1497366412874-3415097a27e7?w=800&h=400&fit=crop',
-  'https://images.unsplash.com/photo-1531973576160-7125cd663d86?w=800&h=400&fit=crop',
-];
-const r1 = insertRoom.run('Phòng họp A101',          a1, 20, 1, 1, 1, 0, 60, 'Phòng họp lớn tầng 1 khu A, đầy đủ thiết bị hội nghị',          IMG[0]).lastInsertRowid;
-const r2 = insertRoom.run('Phòng họp A201',          a1, 10, 1, 0, 0, 0, 60, 'Phòng họp nhỏ tầng 2 khu A',                                     IMG[1]).lastInsertRowid;
-const r3 = insertRoom.run('Phòng họp A301',          a1, 30, 1, 1, 0, 0, 60, 'Phòng hội thảo tầng 3 khu A',                                     IMG[2]).lastInsertRowid;
-const r4 = insertRoom.run('Phòng họp B101',          a2, 15, 0, 1, 0, 0, 60, 'Phòng họp khu thư viện',                                          IMG[3]).lastInsertRowid;
-const r5 = insertRoom.run('Phòng seminar B201',      a2, 50, 1, 1, 0, 0, 60, 'Hội trường thư viện',                                             IMG[4]).lastInsertRowid;
-const r6 = insertRoom.run('Lab C101',                a3, 25, 0, 0, 0, 0, 60, 'Phòng thực hành khu C',                                           IMG[5]).lastInsertRowid;
-const r7 = insertRoom.run('Phòng Hội Nghị VIP B301', a2, 40, 1, 1, 1, 0, 60, 'Phòng hội nghị cao cấp tầng 3 khu Thư viện, trang bị hệ thống hội nghị truyền hình chuyên nghiệp, sức chứa 40 người. Yêu cầu phê duyệt admin.', IMG[6]).lastInsertRowid;
-const r8 = insertRoom.run('Phòng Đào Tạo C202',     a3, 35, 1, 1, 0, 0, 60, 'Phòng đào tạo và hội thảo khu thí nghiệm tầng 2, bố trí linh hoạt dạng lớp học hoặc hội thảo, tích hợp hệ thống ghi âm và streaming trực tuyến.', IMG[7]).lastInsertRowid;
-console.log('✅ Rooms seeded (8 phòng)');
-
-// ─── Equipment ───────────────────────────────────────────────────────────────
-const insertEquip = db.prepare(`INSERT INTO Equipment (RoomID, Name, Icon, Quantity) VALUES (?, ?, ?, ?)`);
-
-// Thiết bị cơ bản cho tất cả phòng
-for (const rID of [r1, r2, r3, r4, r5, r6, r7, r8]) {
-  insertEquip.run(rID, 'Máy chiếu',  'fa-desktop',      1);
-  insertEquip.run(rID, 'Bảng trắng', 'fa-chalkboard',   1);
-  insertEquip.run(rID, 'Điều hòa',   'fa-wind',         1);
-}
-// Thiết bị thêm cho phòng có PhoneCall/VideoCall
-for (const rID of [r1, r3, r5, r7, r8]) {
-  insertEquip.run(rID, 'Hệ thống loa',  'fa-volume-up',    1);
-  insertEquip.run(rID, 'Micro không dây', 'fa-microphone', 2);
-}
-// Thiết bị riêng phòng VIP và seminar
-insertEquip.run(r1, 'Tivi 65 inch',         'fa-tv',          1);
-insertEquip.run(r5, 'Tivi 65 inch',         'fa-tv',          2);
-insertEquip.run(r7, 'Màn hình trình chiếu', 'fa-tv',          1);
-insertEquip.run(r7, 'Camera hội nghị',      'fa-video',       2);
-insertEquip.run(r8, 'Máy quay streaming',   'fa-video',       1);
-insertEquip.run(r6, 'Máy tính',             'fa-laptop',     25);
-console.log('✅ Equipment seeded');
-
-// ─── Roles ───────────────────────────────────────────────────────────────────
-const insertRole = db.prepare(`INSERT INTO Role (Name, Description) VALUES (?, ?)`);
-const role1 = insertRole.run('Quản trị ứng dụng',       'Toàn quyền thực hiện các chức năng trong ứng dụng').lastInsertRowid;
-const role2 = insertRole.run('Người quản lý đặt phòng', 'Có quyền sửa, xóa, phê duyệt đặt phòng của người khác').lastInsertRowid;
-const role3 = insertRole.run('Người đặt phòng',         'Có quyền cập nhật đặt phòng của chính mình').lastInsertRowid;
-
-// Gán admin vào vai trò Quản trị ứng dụng
-db.prepare(`INSERT INTO UserRole (UserID, RoleID) VALUES (?, ?)`).run('admin', role1);
-console.log('✅ Roles seeded');
-
-// ─── Settings ────────────────────────────────────────────────────────────────
-const insertSetting = db.prepare(`INSERT OR IGNORE INTO "Setting"("Key","Value") VALUES (?,?)`);
-for (const [k, v] of [
-  ['timeFormat',      '24h'],
-  ['slotMinutes',     '30'],
-  ['defaultDuration', '60'],
-  ['maxDuration',     '0'],
-  ['timezone',        'Asia/Ho_Chi_Minh'],
-  ['theme',           'dark'],
-  ['workdayStart',    '07:00'],
-  ['workdayEnd',      '21:00'],
-]) insertSetting.run(k, v);
-console.log('✅ Settings seeded');
-
-// ─── Sample bookings ─────────────────────────────────────────────────────────
-const insertBooking = db.prepare(`INSERT INTO Booking (UserID) VALUES (?)`);
-const insertLine = db.prepare(
-  `INSERT INTO LineRoom (BookingID, UserID, FacultyID, RoomID, TimeStart, TimeEnd, Title, NumberPerson, Status)
-   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-);
-
-const today = new Date();
-const fmt = (d) => {
-  const y = d.getFullYear(), mo = String(d.getMonth()+1).padStart(2,'0'), day = String(d.getDate()).padStart(2,'0');
-  const h = String(d.getHours()).padStart(2,'0'), mi = String(d.getMinutes()).padStart(2,'0');
-  return `${y}-${mo}-${day} ${h}:${mi}`;
+const baseConfig = {
+  server:   process.env.DB_SERVER   || 'localhost',
+  port:     parseInt(process.env.DB_PORT) || 1433,
+  user:     process.env.DB_USER     || 'sa',
+  password: process.env.DB_PASSWORD || '',
+  options:  {
+    encrypt:                process.env.DB_ENCRYPT === 'true',
+    trustServerCertificate: process.env.DB_ENCRYPT !== 'true',
+    enableArithAbort:       true,
+  },
 };
-const D = (h, m=0) => new Date(today.getFullYear(), today.getMonth(), today.getDate(), h, m);
 
-const b1 = insertBooking.run('user01').lastInsertRowid;
-insertLine.run(b1, 'user01', f1, r2, fmt(D(9)),  fmt(D(11)), 'Họp nhóm nghiên cứu', 8, 1);
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+let _pool;
+function bind(req, params) {
+  for (const [k, v] of Object.entries(params || {})) {
+    if (v === null || v === undefined) req.input(k, sql.NVarChar, null);
+    else if (Number.isInteger(v))       req.input(k, sql.Int, v);
+    else                                req.input(k, sql.NVarChar(sql.MAX), String(v));
+  }
+}
+async function run(sqlStr, params = {}) {
+  const req = _pool.request();
+  bind(req, params);
+  return req.query(sqlStr);
+}
+async function ins(sqlStr, params = {}) {
+  const req = _pool.request();
+  bind(req, params);
+  const result = await req.query(`${sqlStr}; SELECT SCOPE_IDENTITY() AS id`);
+  return parseInt(result.recordset[0].id);
+}
 
-const b2 = insertBooking.run('admin').lastInsertRowid;
-insertLine.run(b2, 'admin',  f4, r3, fmt(D(14)), fmt(D(16)), 'Họp Ban Giám hiệu',   15, 1);
+// ─── Main ─────────────────────────────────────────────────────────────────────
+async function main() {
+  // Tạo database nếu chưa có
+  console.log(`📦 Connecting to SQL Server: ${baseConfig.server}`);
+  const masterPool = await sql.connect({ ...baseConfig, database: 'master' });
+  await masterPool.request().query(`
+    IF NOT EXISTS (SELECT name FROM sys.databases WHERE name = N'${DB_NAME}')
+      CREATE DATABASE [${DB_NAME}]
+  `);
+  await masterPool.close();
+  console.log(`✅ Database [${DB_NAME}] ready`);
 
-const b3 = insertBooking.run('user02').lastInsertRowid;
-insertLine.run(b3, 'user02', f2, r1, fmt(D(10)), fmt(D(12)), 'Báo cáo tiến độ dự án', 5, 0); // Pending (VIP)
-console.log('✅ Sample bookings seeded');
+  // Kết nối vào database đích
+  _pool = await sql.connect({ ...baseConfig, database: DB_NAME });
+  console.log('\n📋 Creating tables...');
 
-db.close();
-console.log('\n🎉 Database initialized successfully!');
-console.log('   Login: admin/admin123 | user01-user20/123456 | ngocphan|ngocpro457|ngoctran457/123456');
+  await run(`
+    IF OBJECT_ID('Faculty','U') IS NULL
+    CREATE TABLE Faculty (
+      FacultyID   INT           IDENTITY(1,1) NOT NULL PRIMARY KEY,
+      FacultyName NVARCHAR(200) NOT NULL,
+      Avatar      NVARCHAR(MAX) DEFAULT '',
+      [Desc]      NVARCHAR(MAX) DEFAULT '',
+      Visible     INT           DEFAULT 1,
+      CreateDate  NVARCHAR(20)  DEFAULT '',
+      CreateBy    NVARCHAR(100) DEFAULT 'admin'
+    )
+  `);
+  console.log('  ✅ Faculty');
+
+  await run(`
+    IF OBJECT_ID('[User]','U') IS NULL
+    CREATE TABLE [User] (
+      UserID     NVARCHAR(100) NOT NULL PRIMARY KEY,
+      FullName   NVARCHAR(200) NOT NULL,
+      Password   NVARCHAR(255) NOT NULL,
+      FacultyID  INT           REFERENCES Faculty(FacultyID),
+      Mobi       NVARCHAR(50)  DEFAULT '',
+      Email      NVARCHAR(200) DEFAULT '',
+      Avatar     NVARCHAR(MAX) DEFAULT '/uploads/images/nopic.png',
+      Visible    INT           DEFAULT 1,
+      Roles      INT           DEFAULT 0,
+      CreateDate NVARCHAR(20)  DEFAULT '',
+      CreateBy   NVARCHAR(100) DEFAULT 'admin'
+    )
+  `);
+  console.log('  ✅ [User]');
+
+  await run(`
+    IF OBJECT_ID('Area','U') IS NULL
+    CREATE TABLE Area (
+      AreaID     INT           IDENTITY(1,1) NOT NULL PRIMARY KEY,
+      AreaName   NVARCHAR(200) NOT NULL,
+      Avatar     NVARCHAR(MAX) DEFAULT '',
+      [Desc]     NVARCHAR(MAX) DEFAULT '',
+      Visible    INT           DEFAULT 1,
+      CreateDate NVARCHAR(20)  DEFAULT '',
+      CreateBy   NVARCHAR(100) DEFAULT 'admin'
+    )
+  `);
+  console.log('  ✅ Area');
+
+  await run(`
+    IF OBJECT_ID('Room','U') IS NULL
+    CREATE TABLE Room (
+      RoomID       INT           IDENTITY(1,1) NOT NULL PRIMARY KEY,
+      RoomName     NVARCHAR(200) NOT NULL,
+      AreaID       INT           REFERENCES Area(AreaID),
+      Seat         INT           DEFAULT 10,
+      PhoneCall    INT           DEFAULT 0,
+      VideoCall    INT           DEFAULT 0,
+      IsVIP        INT           DEFAULT 0,
+      VIPCondition INT           DEFAULT 0,
+      VIPMinutes   INT           DEFAULT 60,
+      Visible      INT           DEFAULT 1,
+      [Desc]       NVARCHAR(MAX) DEFAULT '',
+      Avatar       NVARCHAR(MAX) DEFAULT '',
+      CreateDate   NVARCHAR(20)  DEFAULT '',
+      CreateBy     NVARCHAR(100) DEFAULT 'admin'
+    )
+  `);
+  console.log('  ✅ Room');
+
+  await run(`
+    IF OBJECT_ID('Equipment','U') IS NULL
+    CREATE TABLE Equipment (
+      EquipmentID INT           IDENTITY(1,1) NOT NULL PRIMARY KEY,
+      RoomID      INT           NOT NULL REFERENCES Room(RoomID),
+      Name        NVARCHAR(200) NOT NULL,
+      Icon        NVARCHAR(100) DEFAULT 'fa-cube',
+      Quantity    INT           DEFAULT 1,
+      Note        NVARCHAR(MAX) DEFAULT '',
+      Visible     INT           DEFAULT 1
+    )
+  `);
+  console.log('  ✅ Equipment');
+
+  await run(`
+    IF OBJECT_ID('Booking','U') IS NULL
+    CREATE TABLE Booking (
+      BookingID  INT           IDENTITY(1,1) NOT NULL PRIMARY KEY,
+      UserID     NVARCHAR(100) REFERENCES [User](UserID),
+      CreateDate NVARCHAR(20)  DEFAULT ''
+    )
+  `);
+  console.log('  ✅ Booking');
+
+  await run(`
+    IF OBJECT_ID('LineRoom','U') IS NULL
+    CREATE TABLE LineRoom (
+      LineRoomID       INT           IDENTITY(1,1) NOT NULL PRIMARY KEY,
+      BookingID        INT           REFERENCES Booking(BookingID),
+      UserID           NVARCHAR(100) REFERENCES [User](UserID),
+      FacultyID        INT           REFERENCES Faculty(FacultyID),
+      RoomID           INT           REFERENCES Room(RoomID),
+      TimeStart        NVARCHAR(20)  NOT NULL,
+      TimeEnd          NVARCHAR(20)  NOT NULL,
+      Title            NVARCHAR(500) DEFAULT '',
+      Content          NVARCHAR(MAX) DEFAULT '',
+      Note             NVARCHAR(MAX) DEFAULT '',
+      NumberPerson     INT           DEFAULT 1,
+      Status           INT           DEFAULT 1,
+      ApprovedBy       NVARCHAR(100) DEFAULT NULL,
+      ApprovedAt       NVARCHAR(20)  DEFAULT NULL,
+      RejectReason     NVARCHAR(MAX) DEFAULT NULL,
+      ServiceRequest   NVARCHAR(MAX) DEFAULT NULL,
+      RecurringGroupID INT           DEFAULT NULL,
+      RecurringType    NVARCHAR(20)  DEFAULT NULL,
+      RecurringEnd     NVARCHAR(20)  DEFAULT NULL,
+      ReminderSent     INT           DEFAULT 0,
+      CreateDate       NVARCHAR(20)  DEFAULT ''
+    )
+  `);
+  console.log('  ✅ LineRoom');
+
+  await run(`
+    IF OBJECT_ID('BookingAttendee','U') IS NULL
+    CREATE TABLE BookingAttendee (
+      AttendeeID INT           IDENTITY(1,1) NOT NULL PRIMARY KEY,
+      LineRoomID INT           NOT NULL REFERENCES LineRoom(LineRoomID),
+      UserID     NVARCHAR(100) NOT NULL REFERENCES [User](UserID),
+      Status     INT           DEFAULT 0,
+      InvitedAt  NVARCHAR(20)  DEFAULT '',
+      CONSTRAINT UC_BookingAttendee UNIQUE (LineRoomID, UserID)
+    )
+  `);
+  console.log('  ✅ BookingAttendee');
+
+  await run(`
+    IF OBJECT_ID('BookingAttachment','U') IS NULL
+    CREATE TABLE BookingAttachment (
+      AttachmentID INT           IDENTITY(1,1) NOT NULL PRIMARY KEY,
+      LineRoomID   INT           NOT NULL REFERENCES LineRoom(LineRoomID),
+      FileName     NVARCHAR(500) NOT NULL,
+      FilePath     NVARCHAR(MAX) NOT NULL,
+      FileSize     INT           DEFAULT 0,
+      MimeType     NVARCHAR(200) DEFAULT '',
+      UploadedAt   NVARCHAR(20)  DEFAULT '',
+      UploadedBy   NVARCHAR(100) DEFAULT ''
+    )
+  `);
+  console.log('  ✅ BookingAttachment');
+
+  await run(`
+    IF OBJECT_ID('Role','U') IS NULL
+    CREATE TABLE Role (
+      RoleID      INT           IDENTITY(1,1) NOT NULL PRIMARY KEY,
+      Name        NVARCHAR(200) NOT NULL CONSTRAINT UC_Role_Name UNIQUE,
+      Description NVARCHAR(MAX) DEFAULT '',
+      CreatedAt   NVARCHAR(20)  DEFAULT ''
+    )
+  `);
+  console.log('  ✅ Role');
+
+  await run(`
+    IF OBJECT_ID('UserRole','U') IS NULL
+    CREATE TABLE UserRole (
+      UserRoleID INT           IDENTITY(1,1) NOT NULL PRIMARY KEY,
+      UserID     NVARCHAR(100) NOT NULL REFERENCES [User](UserID),
+      RoleID     INT           NOT NULL REFERENCES Role(RoleID),
+      AssignedAt NVARCHAR(20)  DEFAULT '',
+      CONSTRAINT UC_UserRole UNIQUE (UserID, RoleID)
+    )
+  `);
+  console.log('  ✅ UserRole');
+
+  await run(`
+    IF OBJECT_ID('Setting','U') IS NULL
+    CREATE TABLE Setting (
+      [Key]   NVARCHAR(100) NOT NULL PRIMARY KEY,
+      [Value] NVARCHAR(MAX) NOT NULL DEFAULT ''
+    )
+  `);
+  console.log('  ✅ Setting');
+
+  await run(`
+    IF OBJECT_ID('AI_Chat_Log','U') IS NULL
+    CREATE TABLE AI_Chat_Log (
+      LogID       INT           IDENTITY(1,1) NOT NULL PRIMARY KEY,
+      UserID      NVARCHAR(100) DEFAULT NULL,
+      UserMessage NVARCHAR(MAX) NOT NULL,
+      BotReply    NVARCHAR(MAX) DEFAULT NULL,
+      AI_JSON     NVARCHAR(MAX) DEFAULT NULL,
+      CreateDate  NVARCHAR(20)  DEFAULT ''
+    )
+  `);
+  console.log('  ✅ AI_Chat_Log');
+
+  // Kiểm tra đã seed chưa
+  const userCount = await run('SELECT COUNT(*) AS c FROM [User]');
+  if (userCount.recordset[0].c > 0) {
+    console.log('\n✅ Database already seeded, skipping...');
+    await _pool.close();
+    process.exit(0);
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  // SEED DATA
+  // ══════════════════════════════════════════════════════════════
+  console.log('\n🌱 Seeding data...');
+
+  // ─── Faculties ─────────────────────────────────────────────────────────────
+  const f1  = await ins(`INSERT INTO Faculty (FacultyName,Visible) VALUES (@n,1)`, { n: 'Khoa Công nghệ Thông tin' });
+  const f2  = await ins(`INSERT INTO Faculty (FacultyName,Visible) VALUES (@n,1)`, { n: 'Khoa Kinh tế' });
+  const f3  = await ins(`INSERT INTO Faculty (FacultyName,Visible) VALUES (@n,1)`, { n: 'Phòng Đào tạo' });
+  const f4  = await ins(`INSERT INTO Faculty (FacultyName,Visible) VALUES (@n,1)`, { n: 'Ban Giám hiệu' });
+  const f5  = await ins(`INSERT INTO Faculty (FacultyName,Visible) VALUES (@n,1)`, { n: 'Khoa Cơ khí - Xây dựng' });
+  const f6  = await ins(`INSERT INTO Faculty (FacultyName,Visible) VALUES (@n,1)`, { n: 'Khoa Điện - Điện tử' });
+  const f7  = await ins(`INSERT INTO Faculty (FacultyName,Visible) VALUES (@n,1)`, { n: 'Khoa Hóa học - Thực phẩm' });
+  const f8  = await ins(`INSERT INTO Faculty (FacultyName,Visible) VALUES (@n,1)`, { n: 'Khoa Quản trị Kinh doanh' });
+  const f9  = await ins(`INSERT INTO Faculty (FacultyName,Visible) VALUES (@n,1)`, { n: 'Khoa Ngoại ngữ' });
+  const f10 = await ins(`INSERT INTO Faculty (FacultyName,Visible) VALUES (@n,1)`, { n: 'Phòng Hành chính - Nhân sự' });
+  const f11 = await ins(`INSERT INTO Faculty (FacultyName,Visible) VALUES (@n,1)`, { n: 'Phòng Tài chính - Kế toán' });
+  const f12 = await ins(`INSERT INTO Faculty (FacultyName,Visible) VALUES (@n,1)`, { n: 'Trung tâm Nghiên cứu & Phát triển' });
+  console.log('  ✅ Faculties seeded');
+
+  // ─── Users ─────────────────────────────────────────────────────────────────
+  const h = (p) => bcrypt.hashSync(p, 10);
+  const insertUser = async (id, name, pass, roles, facID, email) => {
+    await run(
+      `INSERT INTO [User] (UserID,FullName,Password,Roles,Visible,FacultyID,Email,Mobi)
+       VALUES (@id,@name,@pass,@roles,1,@fac,@email,'')`,
+      { id, name, pass: h(pass), roles, fac: facID, email }
+    );
+  };
+  await insertUser('admin',       'Quản trị viên',       'admin123', 1, f4,  'admin@university.edu.vn');
+  await insertUser('user01',      'Nguyễn Văn An',        '123456',  0, f1,  'an.nguyen@university.edu.vn');
+  await insertUser('user02',      'Trần Thị Bình',        '123456',  0, f2,  'binh.tran@university.edu.vn');
+  await insertUser('ngocphan',    'Trần Minh Ngọc',       '123456',  0, f1,  'minhngocphanme457@gmail.com');
+  await insertUser('ngocpro457',  'Nguyễn Minh Pro',      '123456',  0, f1,  'minhngocpro457@gmail.com');
+  await insertUser('ngoctran457', 'Phan Ngọc Trần Minh',  '123456',  0, f2,  'minhngocphanmetran457@gmail.com');
+  await insertUser('user03', 'Lê Văn Cường',          '123456', 0, f1,  'cuong.le@university.edu.vn');
+  await insertUser('user04', 'Phạm Thị Dung',         '123456', 0, f2,  'dung.pham@university.edu.vn');
+  await insertUser('user05', 'Hoàng Minh Đức',        '123456', 0, f3,  'duc.hoang@university.edu.vn');
+  await insertUser('user06', 'Nguyễn Thu Hà',         '123456', 0, f1,  'ha.nguyen@university.edu.vn');
+  await insertUser('user07', 'Trần Quốc Hùng',        '123456', 0, f4,  'hung.tran@university.edu.vn');
+  await insertUser('user08', 'Lê Thị Kim Lan',        '123456', 0, f5,  'lan.le@university.edu.vn');
+  await insertUser('user09', 'Vũ Minh Long',          '123456', 0, f6,  'long.vu@university.edu.vn');
+  await insertUser('user10', 'Đặng Thị Bích Mai',     '123456', 0, f9,  'mai.dang@university.edu.vn');
+  await insertUser('user11', 'Bùi Quang Nam',         '123456', 0, f8,  'nam.bui@university.edu.vn');
+  await insertUser('user12', 'Ngô Thị Oanh',          '123456', 0, f10, 'oanh.ngo@university.edu.vn');
+  await insertUser('user13', 'Phạm Văn Phúc',         '123456', 0, f11, 'phuc.pham@university.edu.vn');
+  await insertUser('user14', 'Dương Thị Quỳnh',       '123456', 0, f1,  'quynh.duong@university.edu.vn');
+  await insertUser('user15', 'Hoàng Văn Sơn',         '123456', 0, f2,  'son.hoang@university.edu.vn');
+  await insertUser('user16', 'Lý Thị Thanh',          '123456', 0, f7,  'thanh.ly@university.edu.vn');
+  await insertUser('user17', 'Đinh Công Tuấn',        '123456', 0, f6,  'tuan.dinh@university.edu.vn');
+  await insertUser('user18', 'Trịnh Thị Uyên',        '123456', 0, f12, 'uyen.trinh@university.edu.vn');
+  await insertUser('user19', 'Phan Quốc Việt',        '123456', 0, f8,  'viet.phan@university.edu.vn');
+  await insertUser('user20', 'Mai Thị Xuân',          '123456', 0, f9,  'xuan.mai@university.edu.vn');
+  console.log('  ✅ Users seeded');
+
+  // ─── Areas ─────────────────────────────────────────────────────────────────
+  const a1 = await ins(`INSERT INTO Area (AreaName,Visible) VALUES (@n,1)`, { n: 'Khu A - Tòa nhà chính' });
+  const a2 = await ins(`INSERT INTO Area (AreaName,Visible) VALUES (@n,1)`, { n: 'Khu B - Thư viện' });
+  const a3 = await ins(`INSERT INTO Area (AreaName,Visible) VALUES (@n,1)`, { n: 'Khu C - Phòng thí nghiệm' });
+  console.log('  ✅ Areas seeded');
+
+  // ─── Rooms ─────────────────────────────────────────────────────────────────
+  const IMG = [
+    'https://images.unsplash.com/photo-1497366216548-37526070297c?w=800&h=400&fit=crop',
+    'https://images.unsplash.com/photo-1497366754035-f200968a6e72?w=800&h=400&fit=crop',
+    'https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=800&h=400&fit=crop',
+    'https://images.unsplash.com/photo-1573167507387-6b4b98cb7c13?w=800&h=400&fit=crop',
+    'https://images.unsplash.com/photo-1552664730-d307ca884978?w=800&h=400&fit=crop',
+    'https://images.unsplash.com/photo-1556761175-b413da4baf72?w=800&h=400&fit=crop',
+    'https://images.unsplash.com/photo-1497366412874-3415097a27e7?w=800&h=400&fit=crop',
+    'https://images.unsplash.com/photo-1531973576160-7125cd663d86?w=800&h=400&fit=crop',
+  ];
+  const insertRoom = (name, areaID, seat, phone, video, vip, vipCond, vipMin, desc, img) =>
+    ins(
+      `INSERT INTO Room (RoomName,AreaID,Seat,PhoneCall,VideoCall,IsVIP,VIPCondition,VIPMinutes,Visible,[Desc],Avatar)
+       VALUES (@name,@areaID,@seat,@phone,@video,@vip,@vipCond,@vipMin,1,@desc,@img)`,
+      { name, areaID, seat, phone, video, vip, vipCond, vipMin, desc, img }
+    );
+
+  const r1 = await insertRoom('Phòng họp A101',          a1, 20, 1, 1, 1, 0, 60, 'Phòng họp lớn tầng 1 khu A, đầy đủ thiết bị hội nghị',   IMG[0]);
+  const r2 = await insertRoom('Phòng họp A201',          a1, 10, 1, 0, 0, 0, 60, 'Phòng họp nhỏ tầng 2 khu A',                              IMG[1]);
+  const r3 = await insertRoom('Phòng họp A301',          a1, 30, 1, 1, 0, 0, 60, 'Phòng hội thảo tầng 3 khu A',                             IMG[2]);
+  const r4 = await insertRoom('Phòng họp B101',          a2, 15, 0, 1, 0, 0, 60, 'Phòng họp khu thư viện',                                  IMG[3]);
+  const r5 = await insertRoom('Phòng seminar B201',      a2, 50, 1, 1, 0, 0, 60, 'Hội trường thư viện',                                     IMG[4]);
+  const r6 = await insertRoom('Lab C101',                a3, 25, 0, 0, 0, 0, 60, 'Phòng thực hành khu C',                                   IMG[5]);
+  const r7 = await insertRoom('Phòng Hội Nghị VIP B301', a2, 40, 1, 1, 1, 0, 60, 'Phòng hội nghị cao cấp tầng 3 khu Thư viện',             IMG[6]);
+  const r8 = await insertRoom('Phòng Đào Tạo C202',     a3, 35, 1, 1, 0, 0, 60, 'Phòng đào tạo và hội thảo khu thí nghiệm tầng 2',        IMG[7]);
+  console.log('  ✅ Rooms seeded (8 phòng)');
+
+  // ─── Equipment ─────────────────────────────────────────────────────────────
+  const insEquip = (roomID, name, icon, qty) =>
+    run(`INSERT INTO Equipment (RoomID,Name,Icon,Quantity) VALUES (@r,@n,@i,@q)`,
+        { r: roomID, n: name, i: icon, q: qty });
+
+  for (const rID of [r1, r2, r3, r4, r5, r6, r7, r8]) {
+    await insEquip(rID, 'Máy chiếu',  'fa-desktop',    1);
+    await insEquip(rID, 'Bảng trắng', 'fa-chalkboard', 1);
+    await insEquip(rID, 'Điều hòa',   'fa-wind',       1);
+  }
+  for (const rID of [r1, r3, r5, r7, r8]) {
+    await insEquip(rID, 'Hệ thống loa',    'fa-volume-up',  1);
+    await insEquip(rID, 'Micro không dây', 'fa-microphone', 2);
+  }
+  await insEquip(r1, 'Tivi 65 inch',         'fa-tv',    1);
+  await insEquip(r5, 'Tivi 65 inch',         'fa-tv',    2);
+  await insEquip(r7, 'Màn hình trình chiếu', 'fa-tv',    1);
+  await insEquip(r7, 'Camera hội nghị',      'fa-video', 2);
+  await insEquip(r8, 'Máy quay streaming',   'fa-video', 1);
+  await insEquip(r6, 'Máy tính',             'fa-laptop', 25);
+  console.log('  ✅ Equipment seeded');
+
+  // ─── Roles ─────────────────────────────────────────────────────────────────
+  const role1 = await ins(`INSERT INTO Role (Name,Description) VALUES (@n,@d)`,
+    { n: 'Quản trị ứng dụng',       d: 'Toàn quyền thực hiện các chức năng trong ứng dụng' });
+  await ins(`INSERT INTO Role (Name,Description) VALUES (@n,@d)`,
+    { n: 'Người quản lý đặt phòng', d: 'Có quyền sửa, xóa, phê duyệt đặt phòng của người khác' });
+  await ins(`INSERT INTO Role (Name,Description) VALUES (@n,@d)`,
+    { n: 'Người đặt phòng',         d: 'Có quyền cập nhật đặt phòng của chính mình' });
+  await run(`INSERT INTO UserRole (UserID,RoleID) VALUES (@uid,@rid)`, { uid: 'admin', rid: role1 });
+  console.log('  ✅ Roles seeded');
+
+  // ─── Settings ──────────────────────────────────────────────────────────────
+  const settings = [
+    ['timeFormat', '24h'], ['slotMinutes', '30'], ['defaultDuration', '60'],
+    ['maxDuration', '0'], ['timezone', 'Asia/Ho_Chi_Minh'], ['theme', 'dark'],
+    ['workdayStart', '07:00'], ['workdayEnd', '21:00'],
+  ];
+  for (const [k, v] of settings) {
+    await run(
+      `IF NOT EXISTS (SELECT 1 FROM Setting WHERE [Key]=@k)
+       INSERT INTO Setting ([Key],[Value]) VALUES (@k,@v)`,
+      { k, v }
+    );
+  }
+  console.log('  ✅ Settings seeded');
+
+  // ─── Sample bookings ───────────────────────────────────────────────────────
+  const now = new Date();
+  const fmt = (d) => {
+    const y = d.getFullYear(), mo = String(d.getMonth()+1).padStart(2,'0'), day = String(d.getDate()).padStart(2,'0');
+    const hh = String(d.getHours()).padStart(2,'0'), mm = String(d.getMinutes()).padStart(2,'0');
+    return `${y}-${mo}-${day} ${hh}:${mm}:00`;
+  };
+  const D = (h, m = 0) => new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m);
+
+  const b1 = await ins(`INSERT INTO Booking (UserID) VALUES (@uid)`, { uid: 'user01' });
+  await run(
+    `INSERT INTO LineRoom (BookingID,UserID,FacultyID,RoomID,TimeStart,TimeEnd,Title,NumberPerson,Status)
+     VALUES (@bid,@uid,@fid,@rid,@ts,@te,@title,@np,@st)`,
+    { bid: b1, uid: 'user01', fid: f1, rid: r2, ts: fmt(D(9)), te: fmt(D(11)), title: 'Họp nhóm nghiên cứu', np: 8, st: 1 }
+  );
+
+  const b2 = await ins(`INSERT INTO Booking (UserID) VALUES (@uid)`, { uid: 'admin' });
+  await run(
+    `INSERT INTO LineRoom (BookingID,UserID,FacultyID,RoomID,TimeStart,TimeEnd,Title,NumberPerson,Status)
+     VALUES (@bid,@uid,@fid,@rid,@ts,@te,@title,@np,@st)`,
+    { bid: b2, uid: 'admin', fid: f4, rid: r3, ts: fmt(D(14)), te: fmt(D(16)), title: 'Họp Ban Giám hiệu', np: 15, st: 1 }
+  );
+
+  const b3 = await ins(`INSERT INTO Booking (UserID) VALUES (@uid)`, { uid: 'user02' });
+  await run(
+    `INSERT INTO LineRoom (BookingID,UserID,FacultyID,RoomID,TimeStart,TimeEnd,Title,NumberPerson,Status)
+     VALUES (@bid,@uid,@fid,@rid,@ts,@te,@title,@np,@st)`,
+    { bid: b3, uid: 'user02', fid: f2, rid: r1, ts: fmt(D(10)), te: fmt(D(12)), title: 'Báo cáo tiến độ dự án', np: 5, st: 0 }
+  );
+  console.log('  ✅ Sample bookings seeded');
+
+  await _pool.close();
+  console.log('\n🎉 Database initialized successfully!');
+  console.log('   Login: admin/admin123 | user01-user20/123456 | ngocphan|ngocpro457|ngoctran457/123456');
+}
+
+main().catch(err => {
+  console.error('❌ Init failed:', err.message);
+  process.exit(1);
+});

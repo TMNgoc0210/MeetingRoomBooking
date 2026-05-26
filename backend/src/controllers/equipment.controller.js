@@ -15,7 +15,7 @@ const getAll = async (req, res) => {
     `;
     const params = {};
     if (roomID) { sql += ` AND e.RoomID = @roomID`; params.roomID = parseInt(roomID); }
-    if (search) { sql += ` AND e.Name LIKE '%' || @search || '%'`; params.search = search; }
+    if (search) { sql += ` AND e.Name LIKE '%' + @search + '%'`; params.search = search; }
     sql += ` ORDER BY r.RoomName, e.Name`;
     const items = await query(sql, params);
     return success(res, items);

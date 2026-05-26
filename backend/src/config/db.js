@@ -1,121 +1,79 @@
-const Database = require('better-sqlite3');
+const sql = require('mssql');
 const path = require('path');
-const fs = require('fs');
+require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 
-const dbDir = path.join(__dirname, '../../data');
-if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
-
-const dbPath = path.join(dbDir, 'meeting_booking.db');
-const db = new Database(dbPath);
-
-// Bật WAL mode (hiệu năng tốt hơn)
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
-
-// Tạo bảng AI_Chat_Log nếu chưa có
-db.exec(`
-  CREATE TABLE IF NOT EXISTS "AI_Chat_Log" (
-    LogID       INTEGER PRIMARY KEY AUTOINCREMENT,
-    UserMessage TEXT    NOT NULL,
-    AI_JSON     TEXT    NOT NULL,
-    CreateDate  TEXT    DEFAULT (datetime('now','localtime'))
-  );
-`);
-
-console.log('✅ SQLite connected:', dbPath);
-
-/**
- * Convert @paramName → :paramName cho SQLite
- * Convert SQL Server brackets [Tên] → "Tên"
- */
-const convertParams = (sql, params) => {
-  // Convert [TableName] → "TableName"  
-  let sqlStr = sql.replace(/\[([^\]]+)\]/g, '"$1"');
-
-  // Convert @paramName → :paramName
-  sqlStr = sqlStr.replace(/@(\w+)/g, ':$1');
-
-  // Convert GETDATE() → datetime('now','localtime')
-  sqlStr = sqlStr.replace(/GETDATE\(\)/gi, "datetime('now','localtime')");
-
-  // Convert LIKE N'%' + @x + '%' → LIKE '%' || :x || '%'
-  sqlStr = sqlStr.replace(/LIKE\s+N?'%'\s*\+\s*:(\w+)\s*\+\s*'%'/gi, "LIKE '%' || :$1 || '%'");
-
-  // Convert OUTPUT INSERTED.xxx → (handle via lastInsertRowid)
-  sqlStr = sqlStr.replace(/OUTPUT\s+INSERTED\.\w+/gi, '');
-
-  // Convert BIT literals
-  sqlStr = sqlStr.replace(/\b1\b(?=\s*--\s*true)/gi, '1');
-
-  // Prefix params với : cho SQLite
-  const sqliteParams = {};
-  Object.entries(params).forEach(([k, v]) => {
-    // Convert boolean to 0/1
-    if (typeof v === 'boolean') sqliteParams[k] = v ? 1 : 0;
-    else sqliteParams[k] = v;
-  });
-
-  return { sqlStr, sqliteParams };
+const config = {
+  server:   process.env.DB_SERVER   || 'localhost',
+  port:     parseInt(process.env.DB_PORT) || 1433,
+  database: process.env.DB_NAME     || 'MeetingRoomBooking',
+  user:     process.env.DB_USER     || 'sa',
+  password: process.env.DB_PASSWORD || '',
+  options: {
+    encrypt:                process.env.DB_ENCRYPT === 'true',
+    trustServerCertificate: process.env.DB_ENCRYPT !== 'true',
+    enableArithAbort:       true,
+  },
+  pool: { max: 10, min: 0, idleTimeoutMillis: 30000 },
 };
 
-/**
- * Query trả về nhiều rows — wrapped in Promise for async/await compatibility
- */
-const query = (sql, params = {}) => {
-  return new Promise((resolve, reject) => {
-    try {
-      const { sqlStr, sqliteParams } = convertParams(sql, params);
-      const stmt = db.prepare(sqlStr);
-      resolve(stmt.all(sqliteParams));
-    } catch (err) {
-      console.error('[DB] Query error:', err.message);
-      console.error('[DB] SQL:', sql);
-      reject(err);
+let pool = null;
+
+async function getPool() {
+  if (!pool) {
+    pool = await sql.connect(config);
+    console.log(`✅ SQL Server connected: ${config.server} / ${config.database}`);
+  }
+  return pool;
+}
+
+function bindParams(req, params) {
+  for (const [k, v] of Object.entries(params)) {
+    if (v === null || v === undefined) {
+      req.input(k, sql.NVarChar, null);
+    } else if (typeof v === 'number' && Number.isInteger(v)) {
+      req.input(k, sql.Int, v);
+    } else if (typeof v === 'number') {
+      req.input(k, sql.Float, v);
+    } else if (typeof v === 'boolean') {
+      req.input(k, sql.Bit, v ? 1 : 0);
+    } else {
+      req.input(k, sql.NVarChar(sql.MAX), String(v));
     }
-  });
+  }
+}
+
+const query = async (sqlStr, params = {}) => {
+  const p = await getPool();
+  const req = p.request();
+  bindParams(req, params);
+  const result = await req.query(sqlStr);
+  return result.recordset;
 };
 
-/**
- * Query trả về 1 row — wrapped in Promise
- */
-const queryOne = (sql, params = {}) => {
-  return new Promise((resolve, reject) => {
-    try {
-      const { sqlStr, sqliteParams } = convertParams(sql, params);
-      const stmt = db.prepare(sqlStr);
-      resolve(stmt.get(sqliteParams) || null);
-    } catch (err) {
-      console.error('[DB] QueryOne error:', err.message);
-      reject(err);
-    }
-  });
+const queryOne = async (sqlStr, params = {}) => {
+  const rows = await query(sqlStr, params);
+  return rows[0] ?? null;
 };
 
-/**
- * Execute INSERT/UPDATE/DELETE — wrapped in Promise, trả về { recordset, rowsAffected, lastInsertRowid }
- */
-const execute = (sql, params = {}) => {
-  return new Promise((resolve, reject) => {
-    try {
-      const { sqlStr, sqliteParams } = convertParams(sql, params);
-      const stmt = db.prepare(sqlStr);
-      const info = stmt.run(sqliteParams);
-      // Giả lập recordset giống mssql cũ
-      resolve({
-        recordset: info.lastInsertRowid ? [{ id: info.lastInsertRowid }] : [],
-        rowsAffected: [info.changes],
-        lastInsertRowid: info.lastInsertRowid,
-      });
-    } catch (err) {
-      console.error('[DB] Execute error:', err.message);
-      console.error('[DB] SQL:', sql);
-      reject(err);
-    }
-  });
+// execute dùng cho INSERT/UPDATE/DELETE
+// INSERT tự động nối SCOPE_IDENTITY() để lấy lastInsertRowid
+const execute = async (sqlStr, params = {}) => {
+  const p = await getPool();
+  const req = p.request();
+  bindParams(req, params);
+
+  const isInsert = /^\s*INSERT\s/i.test(sqlStr.trim());
+  const finalSql = isInsert ? `${sqlStr}; SELECT SCOPE_IDENTITY() AS id` : sqlStr;
+
+  const result = await req.query(finalSql);
+  // Sau INSERT + SELECT SCOPE_IDENTITY(), result.recordset là recordset cuối (chứa id)
+  const lastId = isInsert ? (result.recordset?.[0]?.id ?? null) : null;
+
+  return {
+    recordset:      result.recordsets?.[0] || [],
+    rowsAffected:   result.rowsAffected    || [0],
+    lastInsertRowid: lastId !== null ? parseInt(lastId) : null,
+  };
 };
 
-// Stub cho backwards compatibility
-const getPool = () => Promise.resolve(db);
-
-module.exports = { query, queryOne, execute, db, getPool };
-
+module.exports = { query, queryOne, execute, getPool, sql };
