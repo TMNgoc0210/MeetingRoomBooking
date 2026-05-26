@@ -2,6 +2,24 @@
 # Large binary files
 *.exe
 *.rar
+*.docx
+*.pdf
+
+# Claude settings
+.claude/settings*.json
+
+# Old project files
+Model/
+anh/
+TaiLieuThamKhao/
+uploads/
+
+# Report/diagram docs
+BaoCao_*.md
+*PlantUML.md
+SoDoMermaid.md
+gen_report*.py
+TONG_HOP_TIEN_DO.md
 
 # ── Node.js / Deploy ──────────────────────────────────────────────────────────
 backend/node_modules/
