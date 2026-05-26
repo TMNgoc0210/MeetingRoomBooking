@@ -1,20 +1,23 @@
 /**
- * AI Chat Controller — Gemini 1.5 Flash (direct REST, no LangChain)
- * 1M TPM / 1500 RPD free tier — function calling native support
+ * AI Chat Controller — Claude Sonnet 4.5 via ShopAIKey (OpenAI-compatible)
  */
 
-const Groq = require('groq-sdk');
+const OpenAI = require('openai');
 const { query, queryOne, execute } = require('../config/db');
 const { success, error, badRequest } = require('../utils/response');
 
-let _groq = null;
+let _client = null;
 function getGroq() {
-  if (!_groq && process.env.GROQ_API_KEY) _groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-  return _groq;
+  if (!_client && process.env.SHOPAIKEY_API_KEY) {
+    _client = new OpenAI({
+      apiKey: process.env.SHOPAIKEY_API_KEY,
+      baseURL: 'https://api.shopaikey.com/v1',
+    });
+  }
+  return _client;
 }
 
-// Groq: llama-3.3-70b-versatile — 6k TPM / 14,400 RPD, best function calling on free tier
-const GROQ_MODEL = 'llama-3.3-70b-versatile';
+const GROQ_MODEL = 'claude-sonnet-4-5';
 
 // ─── Server-side session memory ───────────────────────────────────────────────
 const sessionStore = new Map();
@@ -570,7 +573,7 @@ async function runAI({ messages, systemPrompt, userID, toolDecls }) {
         temperature: 0.2,
       });
     } catch (apiErr) {
-      console.error('[Chat] Groq API error:', apiErr.message?.slice(0, 200));
+      console.error('[Chat] API error:', apiErr.message?.slice(0, 200));
       const isRateLimit = apiErr.status === 429 || apiErr.message?.includes('rate limit') || apiErr.message?.includes('Rate limit');
       return {
         reply: isRateLimit
@@ -625,7 +628,7 @@ async function runAI({ messages, systemPrompt, userID, toolDecls }) {
 // ─── Main Handler ─────────────────────────────────────────────────────────────
 const sendMessage = async (req, res) => {
   try {
-    if (!getGroq()) return error(res, 'GROQ_API_KEY chưa cấu hình trong .env', 503);
+    if (!getGroq()) return error(res, 'SHOPAIKEY_API_KEY chưa cấu hình trong .env', 503);
 
     const { message } = req.body;
     if (!message?.trim()) return badRequest(res, 'Thiếu nội dung tin nhắn');
@@ -719,7 +722,7 @@ Trả lời ngắn gọn, tiếng Việt, emoji vừa phải. Ngoài chủ đề
     let msg = 'AI đang gặp sự cố, vui lòng thử lại.';
     if (raw.includes('rate limit') || raw.includes('Rate limit') || err.status === 429) {
       msg = 'AI đang quá tải, vui lòng thử lại sau vài giây ⏳';
-    } else if (raw.includes('GROQ_API_KEY') || raw.includes('API key')) {
+    } else if (raw.includes('SHOPAIKEY_API_KEY') || raw.includes('API key')) {
       msg = 'Chưa cấu hình API key AI.';
     }
     return error(res, msg, 500);
