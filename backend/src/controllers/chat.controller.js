@@ -649,7 +649,7 @@ Hôm nay: ${fmt(now)} (${days[now.getDay()]}) ${pad(now.getHours())}:${pad(now.g
 Giờ phục vụ: 07:00–21:00.
 
 ĐỊNH DẠNG TRẢ LỜI (bắt buộc):
-- KHÔNG dùng markdown: không **, không bảng |---|, không #, không `
+- KHÔNG dùng markdown: không **, không bảng |---|, không #, không backtick
 - Dùng text thuần, xuống dòng để phân cách
 - Kết quả đặt phòng thành công dùng format:
   ✅ Đặt phòng thành công!
@@ -681,7 +681,7 @@ Trả lời ngắn, thân thiện, tiếng Việt, emoji vừa phải.`;
 Hôm nay: ${fmt(now)} (${days[now.getDay()]}) ${pad(now.getHours())}:${pad(now.getMinutes())} | Admin: ${userName} (${userID})
 
 ĐỊNH DẠNG TRẢ LỜI (bắt buộc):
-- KHÔNG dùng markdown: không **, không bảng |---|, không #, không \`
+- KHÔNG dùng markdown: không **, không bảng |---|, không #, không backtick
 - Text thuần, xuống dòng phân cách, tối đa 8 dòng mỗi câu trả lời
 - Danh sách dùng số thứ tự: 1. 2. 3.
 
