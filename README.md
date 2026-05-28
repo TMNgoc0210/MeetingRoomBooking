@@ -150,7 +150,6 @@ DoAn2026/
 │       └── router/
 ├── MeetingBooking.sql     # Schema SQL Server (tham khảo)
 ├── docker-compose.yml
-└── DEMO_GUIDE.md          # Hướng dẫn demo đồ án
 ```
 
 ---
