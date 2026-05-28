@@ -1,8 +1,6 @@
 # Smart Meeting Room Booking System
 
-Đồ án tốt nghiệp — Hệ thống quản lý và đặt phòng họp thông minh.
-
-**Tech stack:** Node.js · Express · SQL Server · React 18 · Vite · Zustand · FullCalendar · Claude AI
+**Tech stack:** Node.js · Express · SQL Server · React 18 · Vite · Zustand · FullCalendar 
 
 ---
 
