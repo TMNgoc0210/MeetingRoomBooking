@@ -54,8 +54,6 @@ JWT_REFRESH_SECRET=your_refresh_secret_key
 # Frontend URL (CORS)
 CLIENT_URL=http://localhost:3000
 
-# AI Chatbot (ShopAIKey — OpenAI-compatible)
-SHOPAIKEY_API_KEY=your_shopaikey_api_key
 
 # Email nhắc lịch (bỏ trống để tắt)
 SMTP_HOST=smtp.gmail.com
