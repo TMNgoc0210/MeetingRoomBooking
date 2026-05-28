@@ -159,11 +159,12 @@ const ChatbotWidget = () => {
   const [messages, setMessages] = useState([WELCOME])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [streamingText, setStreamingText] = useState(null) // null = idle, string = streaming
   const bottomRef = useRef(null)
 
   useEffect(() => {
     if (open && tab === 'chat') bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, open, loading, tab])
+  }, [messages, streamingText, open, loading, tab])
 
   const handleBotBookRoom = useCallback(async (roomID) => {
     if (!user) { openLoginModal(); return }
@@ -193,22 +194,69 @@ const ChatbotWidget = () => {
     setMessages(prev => [...prev, { role: 'user', text }])
     setInput('')
     setLoading(true)
+    setStreamingText(null)
+
+    let firstToken = true
 
     try {
-      const res = await chatService.sendMessage(text)
-      const { reply, isBookingSuccess, bookingData } = res.data.data
-      setMessages(prev => [...prev, { role: 'bot', text: reply, bookingData: isBookingSuccess ? bookingData : null }])
-      if (isBookingSuccess) {
-        triggerRefresh()
-        toast.success('Đặt phòng thành công qua AI!')
+      const token = useAuthStore.getState().accessToken
+      const baseURL = import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api'
+      const resp = await fetch(`${baseURL}/chat/stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ message: text }),
+      })
+
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+
+      const reader = resp.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const parts = buffer.split('\n\n')
+        buffer = parts.pop() ?? ''
+
+        for (const part of parts) {
+          if (!part.startsWith('data: ')) continue
+          const jsonStr = part.slice(6).trim()
+          if (!jsonStr) continue
+          let ev
+          try { ev = JSON.parse(jsonStr) } catch { continue }
+
+          if (ev.type === 'token') {
+            if (firstToken) { firstToken = false; setLoading(false) }
+            setStreamingText(prev => (prev === null ? ev.token : prev + ev.token))
+          } else if (ev.type === 'done') {
+            setStreamingText(null)
+            setLoading(false)
+            setMessages(prev => [...prev, {
+              role: 'bot', text: ev.reply,
+              bookingData: ev.isBookingSuccess ? ev.bookingData : null,
+            }])
+            if (ev.isBookingSuccess) { triggerRefresh(); toast.success('Đặt phòng thành công qua AI!') }
+          } else if (ev.type === 'error') {
+            setStreamingText(null)
+            setLoading(false)
+            setMessages(prev => [...prev, { role: 'bot', text: ev.message }])
+          }
+        }
       }
     } catch (err) {
+      setStreamingText(null)
+      setLoading(false)
       setMessages(prev => [...prev, {
         role: 'bot',
-        text: err.response?.data?.message || 'Xin lỗi, AI đang gặp sự cố. Vui lòng thử lại.',
+        text: 'Xin lỗi, AI đang gặp sự cố. Vui lòng thử lại.',
       }])
-    } finally {
-      setLoading(false)
     }
   }, [input, user, openLoginModal, triggerRefresh])
 
@@ -305,7 +353,13 @@ const ChatbotWidget = () => {
                   </div>
                 ))}
 
-                {loading && (
+                {streamingText !== null && (
+                  <div className="chat-msg bot" style={{ whiteSpace: 'pre-wrap' }}>
+                    {streamingText}
+                    <span style={{ display: 'inline-block', width: 2, height: '1em', background: 'var(--text-primary)', marginLeft: 1, verticalAlign: 'text-bottom', opacity: 0.7 }} />
+                  </div>
+                )}
+                {loading && streamingText === null && (
                   <div className="chat-msg bot">
                     <div className="thinking-dots"><span /><span /><span /></div>
                   </div>

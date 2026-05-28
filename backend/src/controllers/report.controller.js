@@ -31,7 +31,7 @@ const getDataChart = async (req, res) => {
     // Dùng LIKE prefix vì TimeStart lưu dạng NVARCHAR 'YYYY-MM-DD HH:MM:SS'
     const monthStr = String(month).padStart(2, '0');
     const prefix = `${year}-${monthStr}`;
-    let sql = `SELECT TimeStart FROM LineRoom WHERE TimeStart LIKE @prefix`;
+    let sql = `SELECT TimeStart FROM LineRoom WHERE TimeStart LIKE @prefix AND Status IN (0, 1)`;
     const params = { prefix: `${prefix}%` };
 
     if (roomID > 0) {
@@ -65,7 +65,7 @@ const getSummary = async (req, res) => {
   try {
     // SQLite: dùng date('now','localtime') thay vì GETDATE()
     const [totalRooms] = await query(`SELECT COUNT(*) AS total FROM Room WHERE Visible = 1`);
-    const [totalUsers] = await query(`SELECT COUNT(*) AS total FROM "User" WHERE Visible = 1`);
+    const [totalUsers] = await query(`SELECT COUNT(*) AS total FROM [User] WHERE Visible = 1`);
     const [totalBookings] = await query(`SELECT COUNT(*) AS total FROM LineRoom`);
     const [todayBookings] = await query(
       `SELECT COUNT(*) AS total FROM LineRoom
@@ -98,9 +98,11 @@ const getRoomUsage = async (req, res) => {
 
     const rows = await query(
       `SELECT r.RoomName, COUNT(lr.LineRoomID) AS bookingCount,
-              SUM(DATEDIFF(MINUTE, CAST(lr.TimeStart AS DATETIME2), CAST(lr.TimeEnd AS DATETIME2)) / 60.0) AS totalHours
+              ISNULL(SUM(DATEDIFF(MINUTE, TRY_CAST(lr.TimeStart AS DATETIME2), TRY_CAST(lr.TimeEnd AS DATETIME2)) / 60.0), 0) AS totalHours
        FROM Room r
-       LEFT JOIN LineRoom lr ON r.RoomID = lr.RoomID AND lr.TimeStart LIKE @prefix
+       LEFT JOIN LineRoom lr ON r.RoomID = lr.RoomID
+         AND lr.TimeStart LIKE @prefix
+         AND lr.Status = 1
        WHERE r.Visible = 1
        GROUP BY r.RoomID, r.RoomName
        ORDER BY bookingCount DESC`,

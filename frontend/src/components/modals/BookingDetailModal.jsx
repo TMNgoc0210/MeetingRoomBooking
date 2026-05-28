@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { lineRoomService, attachmentService } from '../../services'
+import api from '../../services/api'
 import dayjs from 'dayjs'
 import useUIStore from '../../store/uiStore'
 import useAuthStore from '../../store/authStore'
@@ -39,6 +40,18 @@ const BookingDetailModal = () => {
     } catch { toast.error('Upload thất bại') }
     setUploading(false)
     e.target.value = ''
+  }
+
+  const handleDownload = async (att) => {
+    try {
+      const res = await api.get(`/linerooms/attachments/${att.AttachmentID}/download`, { responseType: 'blob' })
+      const url = URL.createObjectURL(res.data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = att.FileName
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch { toast.error('Không thể tải file. Vui lòng đăng nhập lại.') }
   }
 
   const handleDeleteAttachment = async (id) => {
@@ -163,13 +176,14 @@ const BookingDetailModal = () => {
                       background: 'var(--bg-hover)', borderRadius: 8, padding: '0.4rem 0.75rem',
                       border: '1px solid var(--border)', fontSize: '0.82rem',
                     }}>
-                      <i className="fa fa-file" style={{ color: 'var(--accent)', flexShrink: 0 }} />
-                      <a href={`http://localhost:5001${att.FilePath}`} target="_blank" rel="noreferrer"
-                        style={{ flex: 1, color: 'var(--text-primary)', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                      <i className={`fa ${getFileIcon(att.FileName)}`} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+                      <span
+                        onClick={() => handleDownload(att)}
+                        style={{ flex: 1, color: 'var(--text-primary)', cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                         onMouseEnter={e => e.target.style.textDecoration = 'underline'}
                         onMouseLeave={e => e.target.style.textDecoration = 'none'}>
                         {att.FileName}
-                      </a>
+                      </span>
                       <span style={{ color: 'var(--text-muted)', flexShrink: 0 }}>{formatSize(att.FileSize)}</span>
                       {canEdit && (
                         <button onClick={() => handleDeleteAttachment(att.AttachmentID)}
@@ -208,5 +222,16 @@ const Info = ({ label, value, icon }) => (
     <div style={{ color: 'var(--text-primary)', fontSize: '0.9rem' }}>{value || '—'}</div>
   </div>
 )
+
+const getFileIcon = (name = '') => {
+  const ext = name.split('.').pop().toLowerCase()
+  if (['pdf'].includes(ext)) return 'fa-file-pdf'
+  if (['doc', 'docx'].includes(ext)) return 'fa-file-word'
+  if (['xls', 'xlsx'].includes(ext)) return 'fa-file-excel'
+  if (['ppt', 'pptx'].includes(ext)) return 'fa-file-powerpoint'
+  if (['zip', 'rar'].includes(ext)) return 'fa-file-archive'
+  if (['jpg', 'jpeg', 'png', 'gif'].includes(ext)) return 'fa-file-image'
+  return 'fa-file-alt'
+}
 
 export default BookingDetailModal

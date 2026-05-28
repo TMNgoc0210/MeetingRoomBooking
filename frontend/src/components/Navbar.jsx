@@ -34,6 +34,7 @@ const Navbar = () => {
   const { openLoginModal, openRegisterModal, openChangePassModal, openUserModal, theme, toggleTheme } = useUIStore()
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
   const dropRef = useRef(null)
   const mobileRef = useRef(null)
   const navigate = useNavigate()
@@ -56,13 +57,16 @@ const Navbar = () => {
     setMobileMenuOpen(false)
   }, [navigate])
 
-  const handleLogout = async () => {
-    try {
-      await authService.logout()
-    } catch {}
-    logout()
+  const handleLogout = () => {
     setDropdownOpen(false)
     setMobileMenuOpen(false)
+    setShowLogoutConfirm(true)
+  }
+
+  const confirmLogout = async () => {
+    setShowLogoutConfirm(false)
+    try { await authService.logout() } catch {}
+    logout()
     navigate('/')
     toast.success('Đã đăng xuất')
   }
@@ -70,6 +74,7 @@ const Navbar = () => {
   const closeMobile = () => setMobileMenuOpen(false)
 
   return (
+    <>
     <nav className="navbar">
       <div className="navbar-inner">
         {/* Logo */}
@@ -90,13 +95,6 @@ const Navbar = () => {
               <i className="fa fa-calendar-alt" style={{ marginRight: 4 }} />Lịch phòng
             </NavLink>
           </li>
-          {user && (
-            <li>
-              <NavLink to="/report" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-                Thống kê
-              </NavLink>
-            </li>
-          )}
           {admin && (
             <li>
               <NavLink to="/admin" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
@@ -178,11 +176,6 @@ const Navbar = () => {
           <NavLink to="/calendar" className={({ isActive }) => `mobile-nav-link ${isActive ? 'active' : ''}`} onClick={closeMobile}>
             <i className="fa fa-calendar-alt" /> Lịch phòng
           </NavLink>
-          {user && (
-            <NavLink to="/report" className={({ isActive }) => `mobile-nav-link ${isActive ? 'active' : ''}`} onClick={closeMobile}>
-              <i className="fa fa-chart-bar" /> Thống kê
-            </NavLink>
-          )}
           {admin && (
             <NavLink to="/admin" className={({ isActive }) => `mobile-nav-link ${isActive ? 'active' : ''}`} onClick={closeMobile}>
               <i className="fa fa-shield-alt" /> Quản trị <PendingBadge />
@@ -222,6 +215,63 @@ const Navbar = () => {
         </div>
       )}
     </nav>
+
+    {showLogoutConfirm && (
+      <div
+        onClick={() => setShowLogoutConfirm(false)}
+        style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}
+      >
+        <div
+          onClick={e => e.stopPropagation()}
+          style={{
+            background: 'var(--bg-card)', border: '1px solid var(--border)',
+            borderRadius: 16, padding: '32px 28px', maxWidth: 360, width: '90%',
+            boxShadow: '0 24px 60px rgba(0,0,0,0.5)', textAlign: 'center',
+          }}
+        >
+          <div style={{
+            width: 56, height: 56, borderRadius: '50%',
+            background: 'rgba(220,38,38,0.12)', margin: '0 auto 16px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <i className="fa fa-sign-out-alt" style={{ color: '#dc2626', fontSize: 22 }} />
+          </div>
+          <h3 style={{ margin: '0 0 8px', color: 'var(--text-primary)', fontSize: '1.1rem', fontWeight: 700 }}>
+            Đăng xuất
+          </h3>
+          <p style={{ margin: '0 0 24px', color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.5 }}>
+            Bạn có chắc chắn muốn đăng xuất không?
+          </p>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+            <button
+              onClick={() => setShowLogoutConfirm(false)}
+              style={{
+                flex: 1, padding: '10px 0', borderRadius: 8, border: '1px solid var(--border)',
+                background: 'var(--bg-hover)', color: 'var(--text-primary)',
+                cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem',
+              }}
+            >
+              Huỷ
+            </button>
+            <button
+              onClick={confirmLogout}
+              style={{
+                flex: 1, padding: '10px 0', borderRadius: 8, border: 'none',
+                background: '#dc2626', color: '#fff',
+                cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem',
+              }}
+            >
+              Đăng xuất
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   )
 }
 

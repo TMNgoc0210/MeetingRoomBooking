@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { reportService, bookingService, roomService } from '../../services'
+import api from '../../services/api'
 import { Bar } from 'react-chartjs-2'
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js'
 import { useNavigate } from 'react-router-dom'
@@ -12,6 +13,8 @@ const AdminDashboard = () => {
   const [chartData, setChartData] = useState(null)
   const [pending, setPending] = useState([])
   const [rooms, setRooms] = useState([])
+  const [loginLogs, setLoginLogs] = useState([])
+  const [logFilter, setLogFilter] = useState('failed')
   const [filter, setFilter] = useState({ month: dayjs().month() + 1, year: dayjs().year(), roomID: 0 })
   const [loadingChart, setLoadingChart] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768)
@@ -28,6 +31,12 @@ const AdminDashboard = () => {
     bookingService.getPending().then(r => setPending(r.data.data || [])).catch(() => {})
     roomService.getAll().then(r => setRooms(r.data.data || [])).catch(() => {})
   }, [])
+
+  useEffect(() => {
+    api.get(`/auth/login-logs?limit=30&status=${logFilter}`, { _silent: true })
+      .then(r => setLoginLogs(r.data.data || []))
+      .catch(() => setLoginLogs([]))
+  }, [logFilter])
 
   useEffect(() => { fetchChart() }, [filter])
 
@@ -214,6 +223,70 @@ const AdminDashboard = () => {
             </div>
           ))}
         </div>
+      </div>
+      {/* Login Log panel */}
+      <div className="card" style={{ marginTop: '1rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: 8 }}>
+          <h3 style={{ fontSize: '0.9rem', fontWeight: 600 }}>
+            <i className="fa fa-shield-alt" style={{ color: 'var(--accent)', marginRight: 6 }} />
+            Nhật ký đăng nhập
+          </h3>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {['failed', 'success', ''].map((v, i) => {
+              const labels = ['Thất bại', 'Thành công', 'Tất cả']
+              const colors  = { failed: '#dc2626', success: '#16a34a', '': 'var(--accent)' }
+              return (
+                <button key={i} onClick={() => setLogFilter(v)}
+                  style={{
+                    padding: '4px 12px', borderRadius: 6, border: '1px solid var(--border)',
+                    fontSize: '0.78rem', cursor: 'pointer', fontWeight: logFilter === v ? 700 : 400,
+                    background: logFilter === v ? colors[v] : 'var(--bg-hover)',
+                    color: logFilter === v ? '#fff' : 'var(--text-secondary)',
+                  }}>
+                  {labels[i]}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {loginLogs.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+            <i className="fa fa-check-circle" style={{ fontSize: '1.5rem', color: 'var(--success)', display: 'block', marginBottom: 6 }} />
+            Không có bản ghi nào
+          </div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+              <thead>
+                <tr style={{ background: 'var(--bg-hover)', color: 'var(--text-muted)' }}>
+                  {['Tài khoản', 'IP', 'Trạng thái', 'Lý do', 'Thời gian'].map(h => (
+                    <th key={h} style={{ padding: '7px 12px', textAlign: 'left', fontWeight: 500, whiteSpace: 'nowrap' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {loginLogs.map(log => (
+                  <tr key={log.LogID} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td style={{ padding: '7px 12px', fontWeight: 600 }}>{log.Username}</td>
+                    <td style={{ padding: '7px 12px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>{log.IP || '—'}</td>
+                    <td style={{ padding: '7px 12px' }}>
+                      <span style={{
+                        padding: '2px 8px', borderRadius: 10, fontSize: '0.72rem', fontWeight: 700,
+                        background: log.Status === 'success' ? 'rgba(22,163,74,0.15)' : 'rgba(220,38,38,0.15)',
+                        color: log.Status === 'success' ? '#16a34a' : '#dc2626',
+                      }}>
+                        {log.Status === 'success' ? 'Thành công' : 'Thất bại'}
+                      </span>
+                    </td>
+                    <td style={{ padding: '7px 12px', color: 'var(--text-muted)' }}>{log.Reason || '—'}</td>
+                    <td style={{ padding: '7px 12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{log.CreatedAt}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   )

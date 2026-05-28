@@ -3,6 +3,15 @@ const { query, queryOne, execute } = require('../config/db');
 const { hashPassword, verifyPassword } = require('../utils/hashPassword');
 const { success, error, unauthorized, badRequest } = require('../utils/response');
 
+const logLogin = (username, ip, status, reason = '') => {
+  const createdAt = new Date().toISOString().slice(0, 19).replace('T', ' ');
+  execute(
+    `INSERT INTO LoginLog (Username, IP, Status, Reason, CreatedAt)
+     VALUES (@username, @ip, @status, @reason, @createdAt)`,
+    { username, ip: ip || '', status, reason, createdAt }
+  ).catch(() => {});
+};
+
 /**
  * Tạo access token (15 phút)
  */
@@ -48,14 +57,17 @@ const login = async (req, res) => {
       { username }
     );
 
+    const ip = req.ip || req.headers['x-forwarded-for'] || '';
     const user = users[0];
     if (!user) {
+      logLogin(username, ip, 'failed', 'Tài khoản không tồn tại');
       return unauthorized(res, 'Tài khoản không tồn tại hoặc đã bị khóa');
     }
 
     // Verify password (hỗ trợ SHA256 cũ và bcrypt mới)
     const { valid, needsUpgrade } = await verifyPassword(password, user.Password);
     if (!valid) {
+      logLogin(username, ip, 'failed', 'Sai mật khẩu');
       return unauthorized(res, 'Mật khẩu không đúng');
     }
 
@@ -80,6 +92,7 @@ const login = async (req, res) => {
     });
 
     // Trả về thông tin user và access token (giống cấu trúc cũ để React dùng được)
+    logLogin(username, ip, 'success', '');
     return success(res, {
       accessToken,
       user: {

@@ -14,7 +14,7 @@ async function runReminder() {
               u.Email  AS OwnerEmail,  u.FullName  AS OwnerName,
               r.RoomName, a.AreaName
        FROM LineRoom lr
-       JOIN "User"  u ON lr.UserID  = u.UserID
+       JOIN [User]  u ON lr.UserID  = u.UserID
        JOIN Room    r ON lr.RoomID  = r.RoomID
        LEFT JOIN Area a ON r.AreaID = a.AreaID
        WHERE lr.Status       = 1
@@ -55,7 +55,7 @@ async function runReminder() {
       const attendees = await query(
         `SELECT u.Email, u.FullName
          FROM BookingAttendee ba
-         JOIN "User" u ON ba.UserID = u.UserID
+         JOIN [User] u ON ba.UserID = u.UserID
          WHERE ba.LineRoomID = @lineRoomID AND u.Email != '' AND u.Email IS NOT NULL`,
         { lineRoomID: booking.LineRoomID }
       );

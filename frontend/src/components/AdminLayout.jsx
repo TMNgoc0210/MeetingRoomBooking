@@ -9,6 +9,7 @@ import AdminChatbotWidget from './chat/AdminChatbotWidget'
 
 const MENU = [
   { to: '/admin', end: true, icon: 'fa-chart-pie', label: 'Thống kê' },
+  { to: '/admin/report', icon: 'fa-chart-bar', label: 'Báo cáo' },
   { to: '/admin/approvals', icon: 'fa-clipboard-check', label: 'Phê duyệt', badge: true },
   { to: '/admin/rooms', icon: 'fa-door-open', label: 'Quản lý phòng' },
   { to: '/admin/equipment', icon: 'fa-tools', label: 'Thiết bị' },

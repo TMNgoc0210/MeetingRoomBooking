@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
 import AppRouter from './router/AppRouter'
 import Navbar from './components/Navbar'
+import Footer from './components/Footer'
 import LoginModal from './components/modals/LoginModal'
 import ChangePasswordModal from './components/modals/ChangePasswordModal'
 import BookingModal from './components/modals/BookingModal'
@@ -31,6 +32,7 @@ const App = () => {
     <>
       {!isAdmin && <Navbar />}
       <AppRouter />
+      {!isAdmin && <Footer />}
 
       {/* Global Modals */}
       <LoginModal />

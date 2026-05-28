@@ -42,9 +42,10 @@ const CalendarView = () => {
     setLoadingBookings(true)
     try {
       let res
-      if (sel.type === 'all')       res = await lineRoomService.getAll()
-      else if (sel.type === 'area') res = await lineRoomService.getByArea(sel.data.AreaID)
-      else                          res = await lineRoomService.getByRoom(sel.data.RoomID)
+      if (sel.type === 'all')        res = await lineRoomService.getAll()
+      else if (sel.type === 'mine')  res = await lineRoomService.getMy()
+      else if (sel.type === 'area')  res = await lineRoomService.getByArea(sel.data.AreaID)
+      else                           res = await lineRoomService.getByRoom(sel.data.RoomID)
       setBookings(res.data.data || [])
 
       if (sel.type === 'room') {
@@ -79,6 +80,13 @@ const CalendarView = () => {
     sel.type === 'room' ? b : { ...b, Title: `[${b.RoomName}] ${b.Title}` }
   )
 
+  const headerTitleMap = {
+    all:  'Tất cả phòng họp',
+    mine: 'Lịch của tôi',
+    area: sel.data?.AreaName,
+    room: sel.data?.RoomName,
+  }
+
   const searchLower = sidebarSearch.toLowerCase()
   const groupedAreas = areas.map(area => ({
     ...area,
@@ -92,15 +100,15 @@ const CalendarView = () => {
     r.RoomName.toLowerCase().includes(searchLower)
   )
 
-  const headerTitle = sel.type === 'all'
-    ? 'Tất cả phòng họp'
-    : sel.type === 'area' ? sel.data.AreaName : sel.data.RoomName
+  const headerTitle = headerTitleMap[sel.type] ?? ''
 
   const headerSub = sel.type === 'all'
     ? `${rooms.length} phòng · ${areas.length} khu vực`
-    : sel.type === 'area'
-      ? `${rooms.filter(r => r.AreaID === sel.data.AreaID).length} phòng trong khu vực`
-      : null
+    : sel.type === 'mine'
+      ? `${bookings.length} lịch đặt của bạn`
+      : sel.type === 'area'
+        ? `${rooms.filter(r => r.AreaID === sel.data.AreaID).length} phòng trong khu vực`
+        : null
 
   // ── Sidebar content (dùng lại cho cả desktop + mobile tab) ──
   const SidebarContent = (
@@ -134,21 +142,24 @@ const CalendarView = () => {
         ) : (
           <>
             {!sidebarSearch && (
-              <div
-                onClick={() => handleSelect(DEFAULT_SEL)}
-                style={{
-                  padding: '0.6rem 1rem', cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', gap: 8,
-                  background: sel.type === 'all' ? 'rgba(201,169,110,0.1)' : 'transparent',
-                  borderLeft: sel.type === 'all' ? '3px solid var(--accent)' : '3px solid transparent',
-                  transition: 'background 0.15s',
-                }}
-              >
-                <i className="fa fa-th-large" style={{ fontSize: '0.78rem', color: sel.type === 'all' ? 'var(--accent)' : 'var(--text-muted)', flexShrink: 0 }} />
-                <span style={{ fontSize: '0.84rem', fontWeight: sel.type === 'all' ? 600 : 400, color: sel.type === 'all' ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
-                  Tất cả phòng
-                </span>
-              </div>
+              <>
+                <SidebarItem
+                  icon="fa-th-large"
+                  label="Tất cả phòng"
+                  active={sel.type === 'all'}
+                  onClick={() => handleSelect(DEFAULT_SEL)}
+                />
+                {user && (
+                  <SidebarItem
+                    icon="fa-calendar-check"
+                    label="Lịch của tôi"
+                    active={sel.type === 'mine'}
+                    onClick={() => handleSelect({ type: 'mine', data: null })}
+                    accent
+                  />
+                )}
+                <div style={{ height: 1, background: 'var(--border)', margin: '4px 0' }} />
+              </>
             )}
 
             {groupedAreas.map(area => (
@@ -396,6 +407,26 @@ const CalendarView = () => {
     </div>
   )
 }
+
+const SidebarItem = ({ icon, label, active, onClick, accent }) => (
+  <div
+    onClick={onClick}
+    style={{
+      padding: '0.6rem 1rem', cursor: 'pointer',
+      display: 'flex', alignItems: 'center', gap: 8,
+      background: active ? 'rgba(201,169,110,0.1)' : 'transparent',
+      borderLeft: active ? '3px solid var(--accent)' : '3px solid transparent',
+      transition: 'background 0.15s',
+    }}
+    onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--bg-hover)' }}
+    onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
+  >
+    <i className={`fa ${icon}`} style={{ fontSize: '0.78rem', color: active || accent ? 'var(--accent)' : 'var(--text-muted)', flexShrink: 0 }} />
+    <span style={{ fontSize: '0.84rem', fontWeight: active ? 600 : 400, color: active ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
+      {label}
+    </span>
+  </div>
+)
 
 const RoomItem = ({ room, selected, onClick }) => (
   <div

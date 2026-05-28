@@ -1,5 +1,6 @@
 const { query, queryOne, execute } = require('../config/db');
 const { success, error, notFound, badRequest } = require('../utils/response');
+const { sendBookingConfirmEmail, sendAttendeeInviteEmail, sendBookingStatusEmail } = require('../utils/email');
 
 // Status constants
 const STATUS = { PENDING: 0, APPROVED: 1, REJECTED: 2, CANCELLED: 3 };
@@ -113,6 +114,61 @@ const bookRoom = async (req, res) => {
       ? `Đã gửi yêu cầu đặt phòng, chờ admin phê duyệt (${slots.length} lịch)`
       : `Đặt phòng thành công (${slots.length} lịch)`;
 
+    // Gửi email mời cho từng attendee (non-blocking)
+    if (attendees.length > 0) {
+      queryOne(
+        `SELECT u.FullName AS OrganizerName, r.RoomName, a.AreaName
+         FROM [User] u, Room r
+         LEFT JOIN Area a ON r.AreaID = a.AreaID
+         WHERE u.UserID = @userID AND r.RoomID = @roomID`,
+        { userID, roomID: parseInt(roomID) }
+      ).then(async info => {
+        if (!info) return;
+        for (const aUserID of attendees) {
+          if (aUserID === userID) continue;
+          try {
+            const att = await queryOne(
+              `SELECT Email, FullName FROM [User] WHERE UserID = @aUserID`,
+              { aUserID }
+            );
+            if (!att?.Email) continue;
+            await sendAttendeeInviteEmail({
+              to:        att.Email,
+              name:      att.FullName,
+              organizer: info.OrganizerName,
+              title,
+              roomName:  info.RoomName,
+              areaName:  info.AreaName,
+              timeStart: slots[0].start,
+              timeEnd:   slots[0].end,
+            });
+          } catch (e) { console.error('[InviteMail]', e.message); }
+        }
+      }).catch(() => {});
+    }
+
+    // Gửi email xác nhận cho người đặt (non-blocking)
+    queryOne(
+      `SELECT u.Email, u.FullName, r.RoomName, a.AreaName
+       FROM [User] u, Room r
+       LEFT JOIN Area a ON r.AreaID = a.AreaID
+       WHERE u.UserID = @userID AND r.RoomID = @roomID`,
+      { userID, roomID: parseInt(roomID) }
+    ).then(info => {
+      if (!info?.Email) return;
+      sendBookingConfirmEmail({
+        to:         info.Email,
+        name:       info.FullName,
+        title,
+        roomName:   info.RoomName,
+        areaName:   info.AreaName,
+        timeStart:  slots[0].start,
+        timeEnd:    slots[0].end,
+        status:     initialStatus,
+        totalSlots: slots.length,
+      }).catch(e => console.error('[BookingMail]', e.message));
+    }).catch(() => {});
+
     return success(res, { lineRoomIDs: insertedIDs, status: initialStatus, needsApproval: needApproval }, msg, 201);
   } catch (err) {
     return error(res, 'Lỗi hệ thống', 500, err.message);
@@ -176,7 +232,16 @@ const updateBooking = async (req, res) => {
 const approveBooking = async (req, res) => {
   try {
     const lineRoomID = parseInt(req.params.id);
-    const booking = await queryOne(`SELECT Status FROM LineRoom WHERE LineRoomID = @lineRoomID`, { lineRoomID });
+    const booking = await queryOne(
+      `SELECT lr.Status, lr.Title, lr.TimeStart, lr.TimeEnd, lr.UserID,
+              u.Email, u.FullName, r.RoomName, a.AreaName
+       FROM LineRoom lr
+       LEFT JOIN [User] u ON lr.UserID = u.UserID
+       LEFT JOIN Room r ON lr.RoomID = r.RoomID
+       LEFT JOIN Area a ON r.AreaID = a.AreaID
+       WHERE lr.LineRoomID = @lineRoomID`,
+      { lineRoomID }
+    );
     if (!booking) return notFound(res, 'Không tìm thấy lịch đặt');
     if (booking.Status !== STATUS.PENDING) return badRequest(res, 'Lịch này không ở trạng thái chờ duyệt');
 
@@ -185,6 +250,17 @@ const approveBooking = async (req, res) => {
        WHERE LineRoomID = @lineRoomID`,
       { status: STATUS.APPROVED, approvedBy: req.user.userID, lineRoomID }
     );
+
+    // Gửi email thông báo duyệt (non-blocking)
+    if (booking.Email) {
+      sendBookingStatusEmail({
+        to: booking.Email, name: booking.FullName,
+        title: booking.Title, roomName: booking.RoomName, areaName: booking.AreaName,
+        timeStart: booking.TimeStart, timeEnd: booking.TimeEnd,
+        approved: true,
+      }).catch(e => console.error('[ApproveMail]', e.message));
+    }
+
     return success(res, null, 'Đã phê duyệt lịch đặt phòng');
   } catch (err) {
     return error(res, 'Lỗi hệ thống', 500, err.message);
@@ -198,10 +274,18 @@ const rejectBooking = async (req, res) => {
   try {
     const lineRoomID = parseInt(req.params.id);
     const { reason } = req.body;
-    const booking = await queryOne(`SELECT Status FROM LineRoom WHERE LineRoomID = @lineRoomID`, { lineRoomID });
+    const booking = await queryOne(
+      `SELECT lr.Status, lr.Title, lr.TimeStart, lr.TimeEnd, lr.UserID,
+              u.Email, u.FullName, r.RoomName, a.AreaName
+       FROM LineRoom lr
+       LEFT JOIN [User] u ON lr.UserID = u.UserID
+       LEFT JOIN Room r ON lr.RoomID = r.RoomID
+       LEFT JOIN Area a ON r.AreaID = a.AreaID
+       WHERE lr.LineRoomID = @lineRoomID`,
+      { lineRoomID }
+    );
     if (!booking) return notFound(res, 'Không tìm thấy lịch đặt');
     if (booking.Status !== STATUS.PENDING) return badRequest(res, 'Lịch này không ở trạng thái chờ duyệt');
-
     if (!reason || !reason.trim()) return badRequest(res, 'Vui lòng nhập lý do từ chối');
 
     await execute(
@@ -210,6 +294,17 @@ const rejectBooking = async (req, res) => {
        WHERE LineRoomID = @lineRoomID`,
       { status: STATUS.REJECTED, approvedBy: req.user.userID, reason: reason.trim(), lineRoomID }
     );
+
+    // Gửi email thông báo từ chối (non-blocking)
+    if (booking.Email) {
+      sendBookingStatusEmail({
+        to: booking.Email, name: booking.FullName,
+        title: booking.Title, roomName: booking.RoomName, areaName: booking.AreaName,
+        timeStart: booking.TimeStart, timeEnd: booking.TimeEnd,
+        approved: false, rejectReason: reason.trim(),
+      }).catch(e => console.error('[RejectMail]', e.message));
+    }
+
     return success(res, null, 'Đã từ chối lịch đặt phòng');
   } catch (err) {
     return error(res, 'Lỗi hệ thống', 500, err.message);
@@ -252,7 +347,7 @@ const getPendingBookings = async (req, res) => {
               r.RoomName, r.IsVIP,
               a.AreaName
        FROM LineRoom lr
-       LEFT JOIN "User" u ON lr.UserID = u.UserID
+       LEFT JOIN [User] u ON lr.UserID = u.UserID
        LEFT JOIN Faculty f ON lr.FacultyID = f.FacultyID
        LEFT JOIN Room r ON lr.RoomID = r.RoomID
        LEFT JOIN Area a ON r.AreaID = a.AreaID

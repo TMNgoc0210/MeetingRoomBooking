@@ -29,7 +29,8 @@ app.set('trust proxy', 1);
 // ─── CORS ─────────────────────────────────────────────────────
 app.use(
   cors({
-    origin: (process.env.CLIENT_URL || 'http://localhost:3000').trim().replace(/\/$/, ''),
+    origin: (process.env.CLIENT_URL || 'http://localhost:3000')
+      .split(',').map(s => s.trim().replace(/\/$/, '')),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
@@ -66,8 +67,8 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 // ─── Static Files ─────────────────────────────────────────────
-// Serve uploaded files (images + docs)
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// Chỉ serve ảnh công khai — docs phải qua /api/attachments/:id/download (có auth)
+app.use('/uploads/images', express.static(path.join(__dirname, '../uploads/images')));
 
 // ─── Routes ───────────────────────────────────────────────────
 app.use('/api/auth',      require('./routes/auth.routes'));

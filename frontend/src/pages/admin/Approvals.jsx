@@ -113,7 +113,7 @@ const Approvals = () => {
                     <td style={tdStyle}>{b.Title}</td>
                     <td style={{ ...tdStyle, textAlign: 'center' }}>{b.NumberPerson}</td>
                     <td style={{ ...tdStyle, color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-                      {dayjs(b.CreateDate).format('DD/MM HH:mm')}
+                      {b.CreateDate ? dayjs(b.CreateDate).format('DD/MM HH:mm') : '—'}
                     </td>
                     <td style={{ ...tdStyle, textAlign: 'right' }}>
                       <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>

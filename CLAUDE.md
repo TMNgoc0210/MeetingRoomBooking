@@ -4,7 +4,7 @@
 
 Hệ thống quản lý và đặt phòng họp thông minh (Smart Meeting Room). Người dùng tìm phòng, xem lịch trên calendar, đặt phòng; admin quản lý phòng/khu vực/người dùng và xem báo cáo thống kê.
 
-**Trạng thái:** Đang phát triển — MVP + P0/P1 hoàn thành, đang hoàn thiện UI/UX nâng cao.
+**Trạng thái:** Đang phát triển — MVP + P0/P1 hoàn thành, đang hoàn thiện UI/UX nâng cao + chuẩn bị deploy.
 
 ---
 
@@ -13,13 +13,13 @@ Hệ thống quản lý và đặt phòng họp thông minh (Smart Meeting Room)
 ### Backend
 | Thành phần | Công nghệ |
 |---|---|
-| Runtime | Node.js (v25 hiện tại) |
+| Runtime | Node.js (v18+) |
 | Framework | Express.js |
-| Database | SQLite (better-sqlite3) — file `backend/data/meeting_booking.db` |
+| Database | **SQL Server** (`mssql`) — kết nối qua `DB_SERVER`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` |
 | Auth | JWT — access token 15m (Bearer header) + refresh token 7d (HttpOnly cookie) |
 | File upload | Multer → `backend/uploads/images/` (ảnh) + `backend/uploads/docs/` (tài liệu) |
 | Security | helmet, express-rate-limit, bcryptjs |
-| AI Chatbot | **LangChain** (`@langchain/google-genai`) + **Gemini 2.5 Flash** (GEMINI_API_KEY) |
+| AI Chatbot | **ShopAIKey** (OpenAI-compatible) + **Claude Sonnet 4.5** (`SHOPAIKEY_API_KEY`) |
 | Entry point | `backend/server.js` → chạy `node server.js` hoặc `npm run dev` |
 
 ### Frontend
@@ -34,20 +34,22 @@ Hệ thống quản lý và đặt phòng họp thông minh (Smart Meeting Room)
 | Icons | Font Awesome (CDN, không cài npm) |
 | Ngày giờ | dayjs |
 
-### Database Schema (SQLite)
+### Database Schema (SQL Server)
 ```
 Faculty → User → Booking → LineRoom ← Room ← Area
                               ↓              ↑
                        BookingAttendee    Equipment
                        BookingAttachment
 Role (standalone)
+UserRole (User ↔ Role)
 Setting (key/value)
+AI_Chat_Log
 ```
 
 **Bảng chính:**
 - **Area**: khu vực phòng họp (Khu A, Khu B...)
 - **Faculty**: khoa/đơn vị/phòng ban
-- **User**: `UserID TEXT PK`, `Roles=0` user thường, `Roles=1` admin, `Visible=1` hoạt động
+- **User**: `UserID NVARCHAR(100) PK`, `Roles=0` user thường, `Roles=1` admin, `Visible=1` hoạt động
 - **Room**: `IsVIP=1` yêu cầu phê duyệt; `VIPCondition` (0=mọi booking, 1=chỉ vượt VIPMinutes); `VIPMinutes` ngưỡng phút
 - **Equipment**: thiết bị phòng (`RoomID`, `Name`, `Icon` FA class, `Quantity`, `Visible`)
 - **LineRoom**: 1 slot đặt phòng; **Status**: `0=Pending, 1=Approved, 2=Rejected, 3=Cancelled`
@@ -58,9 +60,11 @@ Setting (key/value)
 - **BookingAttendee**: danh sách thành viên được mời (`LineRoomID`, `UserID`, `Status`)
 - **BookingAttachment**: tài liệu đính kèm (`LineRoomID`, `FileName`, `FilePath`, `FileSize`, `MimeType`, `UploadedBy`)
 - **Role**: vai trò hệ thống (`RoleID`, `Name`, `Description`) — quản lý định nghĩa vai trò, không ảnh hưởng permission (vẫn dùng `User.Roles=0/1`)
-- **Setting**: cài đặt hệ thống key/value (`Key` TEXT PK, `Value` TEXT)
+- **UserRole**: gán role cho user (`UserID`, `RoleID`) — hiện chưa dùng cho permission thực
+- **Setting**: cài đặt hệ thống key/value (`[Key]` NVARCHAR PK, `[Value]` NVARCHAR)
   - Keys: `timeFormat` (24h/AM/PM), `slotMinutes` (5/10/15/30), `defaultDuration`, `maxDuration`, `timezone`, `theme` (dark/light), `workdayStart`, `workdayEnd`
 - **Booking**: header đặt phòng (hiện ít dùng, LineRoom gần như độc lập)
+- **AI_Chat_Log**: log hội thoại AI (`UserID`, `UserMessage`, `BotReply`, `AI_JSON`, `CreateDate`)
 
 ---
 
@@ -68,13 +72,22 @@ Setting (key/value)
 
 ```
 DoAn2026/
+├── Dockerfile                        ← Monolith build (React + Backend) cho Fly.io
+├── fly.toml                          ← Fly.io config (app: meeting-room-booking, port 8080)
+├── docker-compose.yml                ← Docker Compose cho VPS (backend:5001 + nginx:80)
+├── .dockerignore
+├── MeetingBooking.sql                ← Schema SQL Server gốc (tham khảo)
 ├── backend/
 │   ├── server.js                     ← Entry point (node server.js)
+│   ├── fly.toml                      ← Fly.io config backend-only (app: meeting-booking-backend)
+│   ├── Dockerfile                    ← Backend-only Docker (cho docker-compose)
+│   ├── start.sh                      ← Startup script cho container (init DB nếu lần đầu)
+│   ├── .env                          ← Biến môi trường local (KHÔNG commit)
 │   └── src/
 │       ├── app.js                    ← Express setup, tất cả middleware và routes mount
 │       ├── config/
-│       │   ├── db.js                 ← SQLite + convertParams (@param→:param, [Table]→"Table", GETDATE()→datetime)
-│       │   ├── init-db.js            ← Tạo schema fresh + seed (chạy 1 lần, XÓA data cũ)
+│       │   ├── db.js                 ← SQL Server connection pool (mssql), query/queryOne/execute
+│       │   ├── init-db.js            ← Tạo schema SQL Server + seed (chạy 1 lần)
 │       │   └── migrate.js            ← Thêm cột/bảng mới vào DB đang có (an toàn, idempotent)
 │       ├── controllers/
 │       │   ├── auth.controller.js    ← login, register, logout, getMe, refreshToken
@@ -89,7 +102,7 @@ DoAn2026/
 │       │   ├── role.controller.js    ← CRUD vai trò (admin only)
 │       │   ├── setting.controller.js ← getSettings (public), updateSettings (admin, upsert)
 │       │   ├── report.controller.js  ← chart, summary, roomUsage
-│       │   ├── chat.controller.js    ← AI chatbot (Gemini, server-side session memory)
+│       │   ├── chat.controller.js    ← AI chatbot (Claude via ShopAIKey, Function Calling, server-side memory)
 │       │   └── upload.controller.js
 │       ├── routes/                   ← 1 file route per controller
 │       │   ├── lineroom.routes.js    ← /all và /area/:id PHẢI trước /:id (route ordering!)
@@ -103,6 +116,10 @@ DoAn2026/
 │           ├── response.js           ← success/error/notFound/badRequest/forbidden
 │           └── hashPassword.js       ← bcrypt + SHA256 legacy support
 ├── frontend/
+│   ├── Dockerfile                    ← Frontend Nginx Docker (cho docker-compose)
+│   ├── nginx.conf                    ← Nginx: serve static + proxy /api → backend:5001
+│   ├── vercel.json                   ← Vercel deploy: rewrite /api/* → Fly.io backend
+│   ├── .env.production               ← Production env (VITE_APP_NAME, không có VITE_API_URL)
 │   └── src/
 │       ├── pages/
 │       │   ├── Home.jsx              ← Trang chủ: tìm kiếm + room grid
@@ -186,8 +203,8 @@ Legacy redirects: `/list-room` → `/admin/rooms`, `/approvals` → `/admin/appr
 | 15 | Đặt lịch định kỳ (Recurring) | ✅ | ✅ | daily/weekly/monthly + end date |
 | 16 | Báo cáo chart tuần/tháng | ✅ | ✅ | |
 | 17 | Upload ảnh phòng | ✅ | ✅ | |
-| 18 | AI Chatbot Q&A (User) | ✅ | ✅ | Gold FAB; Gemini 2.5 Flash; rate limit → friendly message |
-| 19 | AI Chatbot đặt phòng NLP | ✅ | ✅ | LangChain + Gemini Function Calling; 4 tools; server-side memory 30 phút |
+| 18 | AI Chatbot Q&A (User) | ✅ | ✅ | Gold FAB; Claude Sonnet 4.5 via ShopAIKey; rate limit → friendly message |
+| 19 | AI Chatbot đặt phòng NLP | ✅ | ✅ | Function Calling (OpenAI tool_use format); 4 tools; server-side memory 30 phút |
 | 20 | AI Chatbot Admin | ✅ | ✅ | Purple/indigo FAB trong AdminLayout; quick replies admin |
 | 21 | Admin Dashboard + Sidebar | ✅ | ✅ | Collapsible sidebar, 9 menu items, pending badge |
 | 22 | Yêu cầu dịch vụ (ServiceRequest) | ✅ | ✅ | Checkbox + textarea trong BookingModal; amber box trong DetailModal |
@@ -197,6 +214,7 @@ Legacy redirects: `/list-room` → `/admin/rooms`, `/approvals` → `/admin/appr
 | 26 | Vai trò (Roles) | ✅ | ✅ | /admin/roles — CRUD định nghĩa vai trò, detail panel bên phải |
 | 27 | Thiết lập chung (Settings) | ✅ | ✅ | /admin/settings — theme, timeFormat, slotMinutes, workday, timezone |
 | 28 | slotDuration từ Settings | ✅ | ✅ | BookingCalendar.jsx đọc `settingsStore.slotDuration()` |
+| 29 | Email nhắc lịch (cron) | ✅ | — | nodemailer + node-cron; gửi trước `REMINDER_MINUTES_BEFORE` phút |
 
 ---
 
@@ -206,30 +224,23 @@ Legacy redirects: `/list-room` → `/admin/rooms`, `/approvals` → `/admin/appr
 |---|---|---|---|
 | A | Equipment icon hiển thị trên Home card | P1 | Hiện chỉ có ở BookDetail và CalendarView header |
 | B | Report page redesign | P1 | Thêm tỷ lệ sử dụng, top phòng, export |
-| C | Email nhắc lịch tự động (cron) | P2 | nodemailer + node-cron; deferred vì cần SMTP config |
-| D | Vai trò gắn với User (phân quyền thực) | P2 | Hiện Role chỉ là định nghĩa, permission vẫn dùng Roles=0/1 |
-| E | Notification trong app | P3 | Khi lịch được duyệt/từ chối |
+| C | Vai trò gắn với User (phân quyền thực) | P2 | Hiện Role chỉ là định nghĩa, permission vẫn dùng Roles=0/1 |
+| D | Notification trong app | P3 | Khi lịch được duyệt/từ chối |
 
 ---
 
 ## AI Chatbot Architecture
 
 ### Thư viện & Model
-- **`@langchain/google-genai`** — `ChatGoogleGenerativeAI` dùng để validate API key + LLM singleton
-- **Model:** `gemini-2.5-flash` (thay `gemini-2.0-flash-lite` hết quota)
-- **Tool calling:** Raw Gemini REST API (`/v1beta/models/:model:generateContent`) vì `@langchain/core` v1.x có bug CJS/UUID khi dùng `tool()` wrapper
+- **ShopAIKey** — OpenAI-compatible API (`baseURL: 'https://api.shopaikey.com/v1'`)
+- **Model:** `claude-sonnet-4-5` (Claude Sonnet 4.5 qua ShopAIKey proxy)
+- **SDK:** `openai` npm package (dùng OpenAI SDK trỏ tới ShopAIKey)
+- **Tool calling:** OpenAI `tool_use` format (`tools` array với `function` type)
 
 ### Server-side Conversation Memory
 - `sessionStore` = `Map<userID, { messages[], lastActive }>` — không dùng frontend-sent history
 - TTL 30 phút, cleanup mỗi 10 phút
 - Tối đa 30 messages per session (rolling window)
-
-### Gemini Function Calling Format
-```js
-// Đúng: functionDeclarations wrapper + UPPERCASE types
-const TOOLS = [{ functionDeclarations: [{ name, description, parameters: { type: 'OBJECT', properties: { key: { type: 'STRING' } } } }] }];
-// Sai: truyền thẳng array hoặc dùng lowercase
-```
 
 ### 4 Tools (User chatbot)
 | Tool | Mô tả |
@@ -242,7 +253,45 @@ const TOOLS = [{ functionDeclarations: [{ name, description, parameters: { type:
 ### Lưu ý timezone
 - **Không dùng** `new Date().toISOString()` để tạo timeStart/timeEnd — trả về UTC, sai 7 tiếng ở VN
 - **Dùng** string arithmetic: `${date} ${hh}:${mm}:00` tính từ startTime + durationMinutes
-- `datetime('now','localtime')` trong SQL là đúng (SQLite tự convert)
+- SQL Server: dùng `GETDATE()` hoặc truyền string `YYYY-MM-DD HH:mm:ss`
+
+---
+
+## Deploy
+
+### Hiện tại
+- **Frontend:** Vercel — `https://meeting-room-booking-zeta-gilt.vercel.app`
+- **Backend:** Chạy local, expose qua ngrok/serveo
+
+### Cấu hình deploy có sẵn
+| File | Mô tả |
+|---|---|
+| `Dockerfile` (root) | Monolith: build React → backend serve cả 2, port 8080 |
+| `fly.toml` (root) | Fly.io app `meeting-room-booking`, volume `meeting_data:/app/data` |
+| `backend/fly.toml` | Fly.io app `meeting-booking-backend` (backend-only) |
+| `docker-compose.yml` | VPS: backend:5001 + nginx:80, volumes cho DB + uploads |
+| `frontend/vercel.json` | Vercel rewrite `/api/*` → `meeting-booking-backend.fly.dev` |
+| `backend/start.sh` | Container startup: init DB (lần đầu) + migrate + start server |
+
+### Biến môi trường cần thiết (production)
+```
+PORT=8080
+NODE_ENV=production
+JWT_SECRET=<strong secret>
+JWT_REFRESH_SECRET=<strong secret>
+CLIENT_URL=<frontend URL>
+DB_SERVER=<sql server host>
+DB_NAME=MeetingRoomBooking
+DB_USER=<user>
+DB_PASSWORD=<password>
+DB_ENCRYPT=true          # true nếu Azure/cloud SQL
+SKIP_CREATE_DB=true      # true nếu DB đã tồn tại sẵn trên hosted service
+SHOPAIKEY_API_KEY=<key>
+GEMINI_API_KEY=<key>     # backup / dùng cho LangChain validate
+SMTP_HOST=smtp.gmail.com # bỏ trống để tắt email
+SMTP_USER=<email>
+SMTP_PASS=<app password>
+```
 
 ---
 
@@ -254,8 +303,7 @@ const TOOLS = [{ functionDeclarations: [{ name, description, parameters: { type:
 3. **`adminOnly` là default export** — `require('../middleware/adminOnly')` KHÔNG destructure `{ adminOnly }`
 4. **Route ordering** — static paths (`/all`, `/area/:id`, `/room/:id`) PHẢI khai báo TRƯỚC dynamic `/:id`
 5. **Conflict detection** bắt buộc trước mọi INSERT vào LineRoom
-6. **SQLite syntax** — KHÔNG dùng MSSQL: `datetime('now','localtime')`, `strftime()`, `LIKE '%' || @param || '%'`, `"User"` (double-quote) thay `[User]`
-   - `db.js` tự convert `[Table]`→`"Table"`, `@param`→`:param`, `GETDATE()`→`datetime(...)` — nhưng tốt nhất viết đúng ngay
+6. **SQL Server syntax** — dùng `[User]` (bracket) cho reserved words, `@param` binding, `NVARCHAR`, `IDENTITY(1,1)`, `GETDATE()`, `LIKE '%' + @param + '%'`
 7. **Param binding** qua object `{ key: value }` — tuyệt đối không concat string SQL
 8. **Response format:** `{ success, data, message }` — không thay đổi
 9. **RejectReason** ghi vào `LineRoom.RejectReason`, KHÔNG ghi đè `LineRoom.Note`
@@ -273,7 +321,7 @@ const TOOLS = [{ functionDeclarations: [{ name, description, parameters: { type:
 
 ## Tài khoản mặc định
 - **Admin:** `admin` / `admin123` (Roles=1, thấy tất cả nav link)
-- **User:** `user01` / `123456`, `user02` / `123456` (Roles=0)
+- **User:** `user01` / `123456`, `user02–user20` / `123456`, `ngocphan|ngocpro457|ngoctran457` / `123456`
 - Người dùng mới tự đăng ký qua form → Roles=0 mặc định
 
 ## Lệnh thường dùng
@@ -282,20 +330,26 @@ const TOOLS = [{ functionDeclarations: [{ name, description, parameters: { type:
 npm run dev                      # nodemon server.js (hot reload)
 node server.js                   # production-like
 
-# Chỉ chạy 1 lần khi setup lần đầu:
-node src/config/init-db.js       # Tạo DB mới + seed (XÓA data cũ nếu có)
+# Chỉ chạy 1 lần khi setup lần đầu (cần SQL Server đang chạy):
+node src/config/init-db.js       # Tạo DB + bảng + seed dữ liệu mẫu
 node src/config/migrate.js       # Thêm cột/bảng mới vào DB đang có (an toàn, idempotent)
 
 # Frontend (chạy từ thư mục frontend/)
 npm run dev                      # Vite dev server port 3000
+npm run build                    # Build production → dist/
+
+# Docker (từ thư mục root)
+docker compose up --build        # Chạy toàn bộ stack (backend:5001 + nginx:80)
+docker compose up --build -d     # Chạy nền
 ```
 
 ## Những việc Claude KHÔNG nên làm
-- Không đổi DB sang PostgreSQL/MySQL — SQLite cho đơn giản
+- Không đổi DB sang PostgreSQL/MySQL/SQLite — giữ SQL Server (mssql)
 - Không đổi state management sang Redux — giữ Zustand
 - Không thêm TypeScript — JavaScript thuần
 - Không mock DB trong test — dùng DB thật
 - Không sửa format response `{ success, data, message }`
-- Không commit `.env` hoặc `data/*.db`
+- Không commit `.env` (chứa credentials thật)
 - Không destructure import adminOnly: `const { adminOnly } = require(...)` sẽ bị undefined
 - Không đặt dynamic route `/:id` trước static routes như `/all`, `/area/:areaId`
+- Không dùng SQLite syntax (`datetime('now','localtime')`, `||` concat, `"Table"` double-quote) — đây là SQL Server

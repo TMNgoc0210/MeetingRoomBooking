@@ -1,0 +1,27 @@
+# Cấu hình deploy Fly.io cho Backend Node.js
+app = "meeting-booking-backend"
+primary_region = "sin" # Khu vực Singapore gần Việt Nam nhất để tốc độ phản hồi nhanh
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+  NODE_ENV = "production"
+  # Điều hướng thư mục upload vào thư mục /data (nơi mount Volume)
+  UPLOAD_DIR = "/app/data/uploads"
+  AI_PROVIDER = "groq"
+  CLIENT_URL = "https://meeting-booking-frontend.vercel.app" # Cấu hình domain của frontend sau khi deploy Vercel
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+# Cấu hình Persistent Volume để lưu SQLite DB và tệp đính kèm không bị mất khi restart máy ảo
+[[mounts]]
+  source = "booking_storage"
+  destination = "/app/data"

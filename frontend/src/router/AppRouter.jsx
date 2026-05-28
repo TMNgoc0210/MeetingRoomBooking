@@ -27,7 +27,6 @@ const AppRouter = () => {
       <Route path="/" element={<Home />} />
       <Route path="/calendar" element={<CalendarView />} />
       <Route path="/book-detail/:id" element={<BookDetail />} />
-      <Route path="/report" element={<Report />} />
 
       {/* Admin routes — wrapped in AdminLayout + AdminRoute guard */}
       <Route path="/admin" element={<AdminRoute><AdminLayout /></AdminRoute>}>
@@ -40,9 +39,11 @@ const AppRouter = () => {
         <Route path="equipment" element={<AdminEquipment />} />
         <Route path="roles" element={<AdminRoles />} />
         <Route path="settings" element={<AdminSettings />} />
+        <Route path="report" element={<Report />} />
       </Route>
 
       {/* Legacy redirects — giữ backward compat nếu có link cũ */}
+      <Route path="/report" element={<Navigate to="/admin/report" replace />} />
       <Route path="/approvals" element={<Navigate to="/admin/approvals" replace />} />
       <Route path="/list-room" element={<Navigate to="/admin/rooms" replace />} />
       <Route path="/list-area" element={<Navigate to="/admin/areas" replace />} />

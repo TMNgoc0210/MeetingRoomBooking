@@ -1,0 +1,34 @@
+# fly.toml — Meeting Room Booking
+# Đổi app name thành tên bạn muốn (phải unique trên Fly.io)
+app = "meeting-room-booking"
+primary_region = "sin"
+
+[build]
+
+[env]
+  NODE_ENV = "production"
+  PORT     = "8080"
+
+# SQLite + uploads đều nằm trên volume /app/data
+# (code mặc định đã dùng path này, không cần đổi code)
+
+[[mounts]]
+  source      = "meeting_data"
+  destination = "/app/data"
+
+[http_service]
+  internal_port       = 8080
+  force_https         = true
+  auto_stop_machines  = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type       = "connections"
+    hard_limit = 25
+    soft_limit = 20
+
+[[vm]]
+  memory   = "512mb"
+  cpu_kind = "shared"
+  cpus     = 1

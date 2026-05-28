@@ -553,37 +553,106 @@ function toGroqTools(decls) {
   }));
 }
 
-// ─── ReAct loop (Groq) ────────────────────────────────────────────────────────
-async function runAI({ messages, systemPrompt, userID, toolDecls }) {
-  const groq = getGroq();
-  const all  = [{ role: 'system', content: systemPrompt }, ...messages];
+// ─── Dispatch tool call ───────────────────────────────────────────────────────
+async function dispatchTool(name, args, userID) {
+  switch (name) {
+    case 'search_available_rooms': return await searchAvailableRooms(args);
+    case 'book_room':              return await bookRoom({ ...args, userID });
+    case 'get_my_bookings':        return await getMyBookings({ ...args, userID });
+    case 'cancel_booking':         return await cancelBooking({ ...args, userID });
+    case 'get_all_bookings':       return await getAllBookings(args);
+    case 'approve_booking':        return await approveBooking({ ...args, adminID: userID });
+    case 'reject_booking':         return await rejectBooking({ ...args, adminID: userID });
+    case 'get_statistics':         return await getStatistics(args);
+    case 'add_room':               return await addRoomTool(args);
+    case 'get_rooms':              return await getRoomsTool(args);
+    case 'get_equipment':          return await getEquipmentTool(args);
+    case 'get_users':              return await getUsersTool(args);
+    default:                       return { error: 'Tool không tồn tại' };
+  }
+}
+
+// ─── ReAct loop ───────────────────────────────────────────────────────────────
+// onStream(token): optional callback — called with each text token for SSE streaming
+async function runAI({ messages, systemPrompt, userID, toolDecls, onStream }) {
+  const groq  = getGroq();
+  const all   = [{ role: 'system', content: systemPrompt }, ...messages];
   const tools = toGroqTools(toolDecls);
   let bookingResult = null;
   let pendingData   = null;
 
   for (let i = 0; i < 6; i++) {
-    let resp;
-    try {
-      resp = await groq.chat.completions.create({
-        model: GROQ_MODEL,
-        messages: all,
-        tools,
-        tool_choice: 'auto',
-        max_tokens: 600,
-        temperature: 0.1,
-      });
-    } catch (apiErr) {
-      console.error('[Chat] API error:', apiErr.message?.slice(0, 200));
-      const isRateLimit = apiErr.status === 429 || apiErr.message?.includes('rate limit') || apiErr.message?.includes('Rate limit');
-      return {
-        reply: isRateLimit
-          ? 'AI đang quá tải, vui lòng thử lại sau vài giây ⏳'
-          : 'AI gặp lỗi tạm thời, vui lòng thử lại.',
-        bookingResult, pendingData, history: all.slice(1),
-      };
+    let msg;
+
+    if (onStream) {
+      // ── Streaming mode ──────────────────────────────────────────────────────
+      let stream;
+      try {
+        stream = await groq.chat.completions.create({
+          model: GROQ_MODEL, messages: all, tools,
+          tool_choice: 'auto', max_tokens: 600, temperature: 0.1, stream: true,
+        });
+      } catch (apiErr) {
+        console.error('[Chat] API error:', apiErr.message?.slice(0, 200));
+        const isRL = apiErr.status === 429 || /rate limit/i.test(apiErr.message || '');
+        return {
+          reply: isRL ? 'AI đang quá tải, vui lòng thử lại sau vài giây ⏳' : 'AI gặp lỗi tạm thời, vui lòng thử lại.',
+          bookingResult, pendingData, history: all.slice(1),
+        };
+      }
+
+      let fullContent  = '';
+      let hasToolCalls = false;
+      const tcMap      = {}; // index → accumulated tool call
+
+      try {
+        for await (const chunk of stream) {
+          const delta = chunk.choices[0]?.delta;
+          if (!delta) continue;
+
+          if (delta.tool_calls) {
+            hasToolCalls = true;
+            for (const tc of delta.tool_calls) {
+              const idx = tc.index ?? 0;
+              if (!tcMap[idx]) tcMap[idx] = { id: '', type: 'function', function: { name: '', arguments: '' } };
+              if (tc.id)                  tcMap[idx].id                       = tc.id;
+              if (tc.function?.name)      tcMap[idx].function.name            += tc.function.name;
+              if (tc.function?.arguments) tcMap[idx].function.arguments       += tc.function.arguments;
+            }
+          }
+          if (delta.content) {
+            fullContent += delta.content;
+            if (!hasToolCalls) onStream(delta.content); // stream text tokens
+          }
+        }
+      } catch (streamErr) {
+        console.error('[Chat] Stream error:', streamErr.message?.slice(0, 100));
+        return { reply: 'AI gặp lỗi khi truyền dữ liệu, vui lòng thử lại.', bookingResult, pendingData, history: all.slice(1) };
+      }
+
+      const toolCalls = Object.values(tcMap);
+      msg = { role: 'assistant', content: fullContent };
+      if (toolCalls.length) msg.tool_calls = toolCalls;
+
+    } else {
+      // ── Non-streaming mode (legacy) ─────────────────────────────────────────
+      let resp;
+      try {
+        resp = await groq.chat.completions.create({
+          model: GROQ_MODEL, messages: all, tools,
+          tool_choice: 'auto', max_tokens: 600, temperature: 0.1,
+        });
+      } catch (apiErr) {
+        console.error('[Chat] API error:', apiErr.message?.slice(0, 200));
+        const isRL = apiErr.status === 429 || /rate limit/i.test(apiErr.message || '');
+        return {
+          reply: isRL ? 'AI đang quá tải, vui lòng thử lại sau vài giây ⏳' : 'AI gặp lỗi tạm thời, vui lòng thử lại.',
+          bookingResult, pendingData, history: all.slice(1),
+        };
+      }
+      msg = resp.choices[0].message;
     }
 
-    const msg  = resp.choices[0].message;
     const norm = { role: msg.role, content: msg.content ?? '' };
     if (msg.tool_calls?.length) norm.tool_calls = msg.tool_calls;
     all.push(norm);
@@ -596,22 +665,7 @@ async function runAI({ messages, systemPrompt, userID, toolDecls }) {
       let args = {};
       try { const p = JSON.parse(tc.function.arguments); if (p && typeof p === 'object') args = p; } catch (_) {}
 
-      let result;
-      switch (tc.function.name) {
-        case 'search_available_rooms': result = await searchAvailableRooms(args); break;
-        case 'book_room':              result = await bookRoom({ ...args, userID }); break;
-        case 'get_my_bookings':        result = await getMyBookings({ ...args, userID }); break;
-        case 'cancel_booking':         result = await cancelBooking({ ...args, userID }); break;
-        case 'get_all_bookings':       result = await getAllBookings(args); break;
-        case 'approve_booking':        result = await approveBooking({ ...args, adminID: userID }); break;
-        case 'reject_booking':         result = await rejectBooking({ ...args, adminID: userID }); break;
-        case 'get_statistics':         result = await getStatistics(args); break;
-        case 'add_room':               result = await addRoomTool(args); break;
-        case 'get_rooms':              result = await getRoomsTool(args); break;
-        case 'get_equipment':          result = await getEquipmentTool(args); break;
-        case 'get_users':              result = await getUsersTool(args); break;
-        default:                       result = { error: 'Tool không tồn tại' };
-      }
+      const result = await dispatchTool(tc.function.name, args, userID);
 
       if (result?.success === true && result?.lineRoomID) bookingResult = result;
       if (tc.function.name === 'get_all_bookings' && result?.found) {
@@ -739,6 +793,130 @@ Ngắn gọn, tiếng Việt, emoji vừa phải. Ngoài chủ đề: "Tôi ch�
   }
 };
 
+// ─── SSE Streaming Handler ────────────────────────────────────────────────────
+const streamMessage = async (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  const write = (data) => {
+    if (!res.writableEnded) res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  try {
+    if (!getGroq()) { write({ type: 'error', message: 'SHOPAIKEY_API_KEY chưa cấu hình' }); return res.end(); }
+
+    const { message } = req.body;
+    if (!message?.trim()) { write({ type: 'error', message: 'Thiếu nội dung tin nhắn' }); return res.end(); }
+
+    const userID   = req.user?.userID   || 'guest';
+    const userName = req.user?.fullName || 'Bạn';
+    const isAdmin  = req.user?.roles === 1;
+
+    const now  = new Date();
+    const pad  = n => String(n).padStart(2, '0');
+    const fmt  = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+    const t1   = new Date(now); t1.setDate(now.getDate() + 1);
+    const t2   = new Date(now); t2.setDate(now.getDate() + 2);
+    const days = ['Chủ nhật','Thứ 2','Thứ 3','Thứ 4','Thứ 5','Thứ 6','Thứ 7'];
+
+    const userSystemPrompt = `Bạn là AI Booking Assistant — trợ lý đặt phòng họp Smart Meeting Room.
+Hôm nay: ${fmt(now)} (${days[now.getDay()]}) ${pad(now.getHours())}:${pad(now.getMinutes())} | Ngày mai: ${fmt(t1)} | Người dùng: ${userName} (${userID})
+Giờ phục vụ: 07:00–21:00.
+
+ĐỊNH DẠNG TRẢ LỜI (bắt buộc):
+- KHÔNG dùng markdown: không **, không bảng |---|, không #, không backtick
+- Dùng text thuần, xuống dòng để phân cách
+- Kết quả đặt phòng thành công dùng format:
+  ✅ Đặt phòng thành công!
+  🆔 Mã: #[ID]
+  📋 Tiêu đề: [title]
+  🏢 Phòng: [room]
+  📅 Ngày: [date]
+  🕐 Thời gian: [start] – [end]
+  👥 Số người: [n]
+  🟢 Trạng thái: [status]
+- Ngắn gọn, tối đa 5 dòng mỗi câu trả lời thông thường
+
+QUY TẮC THỜI GIAN: "sáng"=08:00 "chiều"=13:00 "tối"=18:00 | "hôm nay"=${fmt(now)} "ngày mai"=${fmt(t1)} "ngày kia"=${fmt(t2)}
+
+LUỒNG ĐẶT PHÒNG:
+1. Trích ngày + giờ. Thiếu → hỏi. Thiếu số người → dùng 1.
+2. Gọi search_available_rooms. Hiển thị ≤4 phòng, hỏi chọn.
+3. Sau chọn phòng, hỏi lần lượt: thời lượng → tiêu đề → dịch vụ thêm.
+4. Tóm tắt 1 đoạn ngắn → hỏi "Xác nhận đặt?"
+5. CHỈ gọi book_room khi user xác nhận ("có","ok","đặt đi","ừ","đồng ý").
+6. conflict=true → báo và gợi phòng khác.
+
+LỊCH: "lịch sắp tới" → get_my_bookings(upcoming) | "lịch cũ" → past
+HUỶ: get_my_bookings → xác nhận → cancel_booking
+NGOÀI CHỦ ĐỀ: "Tôi chỉ hỗ trợ đặt phòng họp ạ."
+Trả lời ngắn, thân thiện, tiếng Việt, emoji vừa phải.`;
+
+    const adminSystemPrompt = `Bạn là AI Admin Assistant — trợ lý quản trị Smart Meeting Room.
+Hôm nay: ${fmt(now)} (${days[now.getDay()]}) ${pad(now.getHours())}:${pad(now.getMinutes())} | Admin: ${userName} (${userID})
+
+ĐỊNH DẠNG TRẢ LỜI (bắt buộc):
+- KHÔNG dùng markdown: không **, không bảng |---|, không #, không backtick
+- Text thuần, xuống dòng phân cách, tối đa 8 dòng mỗi câu trả lời
+- Danh sách dùng số thứ tự: 1. 2. 3.
+
+QUẢN LÝ LỊCH: "chờ duyệt" → get_all_bookings(pending) | "hôm nay" → get_all_bookings(date="${fmt(now)}")
+Hiển thị: ID, tên, phòng, người đặt, thời gian. Pending → gợi ý duyệt/từ chối.
+"Duyệt [ID]" → approve_booking | "Từ chối [ID]" → reject_booking
+
+THỐNG KÊ: "thống kê" → get_statistics(today) | "tuần" → week | "tháng" → month
+PHÒNG: "danh sách phòng" → get_rooms | "thêm phòng" → hỏi tên/khu/chỗ → xác nhận → add_room
+THIẾT BỊ: "thiết bị [X]" → get_equipment | NGƯỜI DÙNG: "tìm [tên]" → get_users
+
+ĐẶT PHÒNG: search → chọn → hỏi thời lượng/tiêu đề → tóm tắt → xác nhận → book_room
+Xem lịch: get_my_bookings(upcoming|past|all)
+
+Ngắn gọn, tiếng Việt, emoji vừa phải. Ngoài chủ đề: "Tôi chỉ hỗ trợ quản lý phòng họp ạ."`;
+
+    const systemPrompt = isAdmin ? adminSystemPrompt : userSystemPrompt;
+    const toolDecls    = isAdmin ? [...USER_TOOL_DECLS, ...ADMIN_TOOL_DECLS] : USER_TOOL_DECLS;
+
+    const session  = getSession(userID);
+    const messages = [...session.messages, { role: 'user', content: message }];
+
+    const { reply, bookingResult, pendingData, history } = await runAI({
+      messages, systemPrompt, userID, toolDecls,
+      onStream: (token) => write({ type: 'token', token }),
+    });
+
+    const isBookingSuccess = !!(bookingResult?.success && bookingResult?.lineRoomID);
+    const finalReply = reply || 'Xin lỗi, tôi chưa hiểu rõ yêu cầu. Bạn có thể nói rõ hơn không?';
+
+    session.messages = history.length > 40 ? history.slice(-40) : history;
+
+    execute(
+      `INSERT INTO AI_Chat_Log (UserID, UserMessage, BotReply, AI_JSON, CreateDate)
+       VALUES (@userID, @msg, @reply, @reply, CONVERT(NVARCHAR(20),GETDATE(),120))`,
+      { userID, msg: message, reply: finalReply }
+    ).catch(() => {});
+
+    write({
+      type: 'done',
+      reply: finalReply,
+      isBookingSuccess,
+      bookingData: isBookingSuccess ? bookingResult : null,
+      pendingData: pendingData || null,
+    });
+    res.end();
+
+  } catch (err) {
+    console.error('[Chat Stream] Error:', err.message);
+    const raw = err.message || '';
+    let msg = 'AI đang gặp sự cố, vui lòng thử lại.';
+    if (/rate limit/i.test(raw) || err.status === 429) msg = 'AI đang quá tải, vui lòng thử lại sau vài giây ⏳';
+    write({ type: 'error', message: msg });
+    res.end();
+  }
+};
+
 const clearSession = (userID) => sessionStore.delete(userID);
 
 const getHistory = async (req, res) => {
@@ -757,4 +935,4 @@ const getHistory = async (req, res) => {
   }
 };
 
-module.exports = { sendMessage, clearSession, getHistory };
+module.exports = { sendMessage, streamMessage, clearSession, getHistory };

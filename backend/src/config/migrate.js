@@ -152,6 +152,19 @@ async function main() {
     )
   `);
 
+  await pool.request().query(`
+    IF OBJECT_ID('LoginLog','U') IS NULL
+    CREATE TABLE LoginLog (
+      LogID     INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+      Username  NVARCHAR(100) NOT NULL,
+      IP        NVARCHAR(50)  DEFAULT '',
+      Status    NVARCHAR(20)  NOT NULL,
+      Reason    NVARCHAR(200) DEFAULT '',
+      CreatedAt NVARCHAR(30)  DEFAULT ''
+    )
+  `);
+  console.log('  ✅ LoginLog table ready');
+
   await pool.close();
   console.log('\n🎉 All migrations completed!');
 }

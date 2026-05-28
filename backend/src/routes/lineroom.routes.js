@@ -5,8 +5,8 @@ const {
   getMyBookings, getDetail, getForEdit,
   deleteBooking, addAttendees, removeAttendee,
 } = require('../controllers/lineroom.controller');
-const { getAttachments, addAttachment, deleteAttachment } = require('../controllers/attachment.controller');
-const { authMiddleware } = require('../middleware/auth');
+const { getAttachments, addAttachment, deleteAttachment, downloadAttachment } = require('../controllers/attachment.controller');
+const { authMiddleware, optionalAuth } = require('../middleware/auth');
 const uploadDocs = require('../middleware/uploadDocs');
 
 router.get('/all', getAllBookings);
@@ -20,8 +20,9 @@ router.post('/:id/attendees', authMiddleware, addAttendees);
 router.delete('/:id/attendees/:userID', authMiddleware, removeAttendee);
 
 // Attachments
-router.get('/:id/attachments', getAttachments);
+router.get('/:id/attachments', optionalAuth, getAttachments);
 router.post('/:id/attachments', authMiddleware, uploadDocs.single('file'), addAttachment);
+router.get('/attachments/:id/download', authMiddleware, downloadAttachment);
 router.delete('/attachments/:id', authMiddleware, deleteAttachment);
 
 module.exports = router;
