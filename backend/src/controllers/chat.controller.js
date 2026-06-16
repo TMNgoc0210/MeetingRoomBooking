@@ -63,6 +63,9 @@ async function searchAvailableRooms({ date, startTime, durationMinutes, minSeat,
 
   const timeStart  = `${date} ${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}:00`;
   const timeEnd    = `${date} ${String(endH).padStart(2,'0')}:${String(endM).padStart(2,'0')}:00`;
+  const nowVN = new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 19).replace('T', ' ');
+  if (timeStart <= nowVN)
+    return { error: 'Không thể tìm phòng cho thời gian đã qua. Vui lòng chọn thời gian trong tương lai.' };
   const cap        = parseInt(minSeat) || 1;
   const nameFilter = roomName ? `AND r."RoomName" LIKE '%' || @roomName || '%'` : '';
   const params     = { cap, timeStart, timeEnd };
@@ -115,6 +118,9 @@ async function bookRoom({ roomID, date, startTime, durationMinutes, title, numbe
   const timeStart = `${date} ${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}:00`;
   const timeEnd   = `${date} ${endH}:${endM}:00`;
   const num       = parseInt(numberPerson) || 1;
+  const nowVN = new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 19).replace('T', ' ');
+  if (timeStart <= nowVN)
+    return { success: false, error: 'Không thể đặt phòng cho thời gian đã qua. Vui lòng chọn thời gian trong tương lai.' };
 
   const conflict = await queryOne(
     `SELECT "LineRoomID" FROM LineRoom WHERE "RoomID"=@roomID AND "Status"!=3

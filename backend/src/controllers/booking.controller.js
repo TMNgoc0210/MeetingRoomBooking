@@ -33,6 +33,10 @@ const bookRoom = async (req, res) => {
     if (timeStart >= timeEnd)
       return badRequest(res, 'Thời gian kết thúc phải sau thời gian bắt đầu');
 
+    const nowVN = new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 19).replace('T', ' ');
+    if (!req.user.roles && timeStart <= nowVN)
+      return badRequest(res, 'Không thể đặt phòng cho thời gian đã qua');
+
     if (!req.user.roles) {
       const cancelCount = await getMonthCancelCount(userID);
       if (cancelCount >= CANCEL_LIMIT)
