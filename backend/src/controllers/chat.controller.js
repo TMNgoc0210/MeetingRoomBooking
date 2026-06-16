@@ -63,6 +63,7 @@ async function searchAvailableRooms({ date, startTime, durationMinutes, minSeat,
 
   const timeStart  = `${date} ${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}:00`;
   const timeEnd    = `${date} ${String(endH).padStart(2,'0')}:${String(endM).padStart(2,'0')}:00`;
+  // Chặn tìm phòng cho thời gian đã qua (UTC+7)
   const nowVN = new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 19).replace('T', ' ');
   if (timeStart <= nowVN)
     return { error: 'Không thể tìm phòng cho thời gian đã qua. Vui lòng chọn thời gian trong tương lai.' };
@@ -118,6 +119,7 @@ async function bookRoom({ roomID, date, startTime, durationMinutes, title, numbe
   const timeStart = `${date} ${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}:00`;
   const timeEnd   = `${date} ${endH}:${endM}:00`;
   const num       = parseInt(numberPerson) || 1;
+  // Chặn đặt phòng cho thời gian đã qua (UTC+7)
   const nowVN = new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 19).replace('T', ' ');
   if (timeStart <= nowVN)
     return { success: false, error: 'Không thể đặt phòng cho thời gian đã qua. Vui lòng chọn thời gian trong tương lai.' };
