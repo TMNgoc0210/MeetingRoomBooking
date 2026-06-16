@@ -1,3 +1,23 @@
+/**
+ * store/settingsStore.js — Thiết lập hệ thống từ DB (Zustand)
+ * ─────────────────────────────────────────────────────────────
+ * Fetch và cache settings từ GET /api/settings.
+ * App.jsx gọi fetch() một lần khi mount → toàn bộ app dùng chung.
+ *
+ * Settings quan trọng:
+ *   slotMinutes   — kích thước ô giờ trên FullCalendar (5/10/15/30 phút)
+ *   timeFormat    — '24h' hoặc 'AM/PM'
+ *   workdayStart  — giờ bắt đầu hiển thị trên Calendar ('07:00')
+ *   workdayEnd    — giờ kết thúc hiển thị trên Calendar ('21:00')
+ *   theme         — 'dark'|'light'
+ *
+ * Helper methods:
+ *   slotDuration() — chuyển slotMinutes → format FullCalendar "00:30:00"
+ *   hour12()       — trả về boolean (true nếu AM/PM)
+ *
+ * Cách đọc trong component:
+ *   const slotDuration = useSettingsStore(s => s.slotDuration())
+ */
 import { create } from 'zustand'
 import api from '../services/api'
 

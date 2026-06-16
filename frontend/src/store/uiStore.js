@@ -1,3 +1,24 @@
+/**
+ * store/uiStore.js — State giao diện & modal (Zustand)
+ * ──────────────────────────────────────────────────────
+ * Quản lý trạng thái mở/đóng của tất cả modal trong app
+ * và một số state UI dùng chung.
+ * KHÔNG persist (reset mỗi lần reload — đúng hành vi mong muốn cho modal).
+ *
+ * Modal states (mỗi modal có open + dữ liệu kèm theo):
+ *   bookingModal      — modal đặt phòng mới (kèm room object)
+ *   editBookingModal  — modal sửa booking (kèm lineRoomID)
+ *   detailModal       — modal xem chi tiết booking (kèm lineRoomID)
+ *   roomModal         — modal thêm/sửa phòng (admin)
+ *   userModal         — modal thêm/sửa user (admin)
+ *   changePassModal   — modal đổi mật khẩu
+ *   loginModal        — modal đăng nhập / đăng ký (gồm loginTab: 'login'|'register')
+ *
+ * UI state:
+ *   theme             — 'dark'|'light', đồng bộ với localStorage
+ *   refreshKey        — counter tăng khi cần force re-fetch data toàn cục
+ *   triggerRefresh()  — gọi sau khi tạo/sửa/xoá booking để Calendar tự cập nhật
+ */
 import { create } from 'zustand'
 
 const useUIStore = create((set) => ({
@@ -46,6 +67,11 @@ const useUIStore = create((set) => ({
   openLoginModal: (tab = 'login') => set({ loginModal: true, loginTab: tab }),
   openRegisterModal: () => set({ loginModal: true, loginTab: 'register' }),
   closeLoginModal: () => set({ loginModal: false, loginTab: 'login' }),
+
+  // Policy modal
+  policyModal: false,
+  openPolicyModal: () => set({ policyModal: true }),
+  closePolicyModal: () => set({ policyModal: false }),
 
   // Refresh triggers — dùng để force re-fetch data
   refreshKey: 0,

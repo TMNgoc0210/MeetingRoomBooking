@@ -1,3 +1,25 @@
+/**
+ * services/index.js — Tập trung tất cả API service calls
+ * ──────────────────────────────────────────────────────────
+ * Mọi component/page chỉ import từ file này, không gọi api.js trực tiếp.
+ * Mỗi service tương ứng với 1 nhóm endpoint backend:
+ *
+ *   authService      — đăng nhập, đăng ký, getMe
+ *   roomService      — danh sách, tìm kiếm, CRUD phòng
+ *   bookingService   — đặt phòng, duyệt, từ chối, huỷ
+ *   lineRoomService  — truy vấn slot lịch, attendees, attachments
+ *   attachmentService— upload tài liệu đính kèm
+ *   equipmentService — thiết bị theo phòng (public)
+ *   equipmentAdminService — CRUD thiết bị (admin)
+ *   userService      — CRUD người dùng, đổi mật khẩu
+ *   areaService      — CRUD khu vực
+ *   facultyService   — CRUD khoa/đơn vị
+ *   reportService    — báo cáo chart, summary, room usage
+ *   uploadService    — upload ảnh phòng
+ *   chatService      — gửi/nhận tin nhắn chatbot AI
+ *   settingsService  — đọc/ghi thiết lập hệ thống
+ *   roleService      — CRUD định nghĩa vai trò
+ */
 import api from './api'
 
 export const authService = {

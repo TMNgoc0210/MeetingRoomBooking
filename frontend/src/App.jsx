@@ -9,6 +9,7 @@ import BookingModal from './components/modals/BookingModal'
 import EditBookingModal from './components/modals/EditBookingModal'
 import BookingDetailModal from './components/modals/BookingDetailModal'
 import UserModal from './components/modals/UserModal'
+import PolicyModal from './components/modals/PolicyModal'
 import ChatbotWidget from './components/chat/ChatbotWidget'
 import AdminChatbotWidget from './components/chat/AdminChatbotWidget'
 import useUIStore from './store/uiStore'
@@ -41,6 +42,7 @@ const App = () => {
       <EditBookingModal />
       <BookingDetailModal />
       <UserModal />
+      <PolicyModal />
 
       {/* AI Chatbot — admin dùng AdminChatbotWidget ở mọi trang */}
       {!isAdmin && (isAdminUser ? <AdminChatbotWidget /> : <ChatbotWidget />)}

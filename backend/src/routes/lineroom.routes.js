@@ -1,3 +1,21 @@
+/**
+ * routes/lineroom.routes.js — Routes truy vấn lịch đặt
+ * ───────────────────────────────────────────────────────
+ * QUAN TRỌNG — Thứ tự khai báo route:
+ *   /all, /area/:id, /room/:id, /my  phải đứng TRƯỚC  /:id
+ *   Nếu /:id đứng trước, Express sẽ hiểu "all" là một ID cụ thể → sai.
+ *
+ * Tóm tắt endpoints:
+ *   GET  /api/linerooms/all              — toàn bộ lịch (CalendarView tất cả)
+ *   GET  /api/linerooms/area/:areaId     — lịch theo khu vực
+ *   GET  /api/linerooms/room/:roomId     — lịch theo phòng
+ *   GET  /api/linerooms/my              — lịch cá nhân [login]
+ *   GET  /api/linerooms/:id              — chi tiết 1 slot
+ *   DELETE /api/linerooms/:id            — xoá [login, chủ booking]
+ *   POST /api/linerooms/:id/attendees    — thêm người tham dự [login]
+ *   POST /api/linerooms/:id/attachments  — upload tài liệu [login]
+ *   GET  /api/linerooms/:id/attachments/:aid/download — tải file [login]
+ */
 const express = require('express');
 const router = express.Router();
 const {

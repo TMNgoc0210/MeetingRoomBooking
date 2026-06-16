@@ -1,3 +1,33 @@
+/**
+ * app.js — Cấu hình Express application
+ * ─────────────────────────────────────
+ * Vai trò: thiết lập toàn bộ middleware và gắn tất cả routes vào app.
+ * Được import bởi server.js để khởi chạy.
+ *
+ * Thứ tự middleware quan trọng:
+ *   helmet (security headers)
+ *   → cors (cho phép frontend gọi API)
+ *   → rateLimit (chống spam)
+ *   → bodyParser (đọc JSON body)
+ *   → routes (/api/auth, /api/rooms, /api/bookings, ...)
+ *   → 404 handler
+ *   → global error handler
+ *
+ * Danh sách route:
+ *   /api/auth       — đăng nhập, đăng ký, refresh token
+ *   /api/users      — quản lý người dùng
+ *   /api/rooms      — quản lý phòng họp
+ *   /api/bookings   — đặt phòng, duyệt, từ chối, huỷ
+ *   /api/linerooms  — truy vấn lịch đặt (slot)
+ *   /api/areas      — quản lý khu vực
+ *   /api/faculties  — quản lý khoa/đơn vị
+ *   /api/reports    — báo cáo thống kê
+ *   /api/upload     — upload ảnh phòng
+ *   /api/equipment  — thiết bị phòng
+ *   /api/chat       — AI chatbot
+ *   /api/settings   — thiết lập chung hệ thống
+ *   /api/roles      — quản lý vai trò
+ */
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');

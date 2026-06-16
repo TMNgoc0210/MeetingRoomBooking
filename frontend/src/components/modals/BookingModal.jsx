@@ -20,7 +20,7 @@ const SectionHeader = ({ icon, title }) => (
 )
 
 const BookingModal = () => {
-  const { bookingModal, closeBookingModal } = useUIStore()
+  const { bookingModal, closeBookingModal, openPolicyModal } = useUIStore()
   const { user } = useAuthStore()
   const [faculties, setFaculties] = useState([])
   const [allUsers, setAllUsers] = useState([])
@@ -379,6 +379,13 @@ const BookingModal = () => {
         {/* Footer — outside the scroll area */}
         <div className="modal-footer" style={{ flexShrink: 0 }}>
           <button type="button" className="btn btn-secondary" onClick={closeBookingModal}>Huỷ</button>
+          <button type="button" onClick={openPolicyModal} style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: 'var(--accent)', fontSize: '0.8rem', padding: '0 0.25rem',
+            display: 'flex', alignItems: 'center', gap: 5, marginRight: 'auto',
+          }}>
+            <i className="fa fa-info-circle" />Chính sách huỷ &amp; đổi lịch
+          </button>
           <button className="btn btn-primary" disabled={loading} onClick={handleSubmit}>
             {loading
               ? <><span className="spinner" style={{ width: 15, height: 15, borderWidth: 2 }} /> Đang xử lý...</>

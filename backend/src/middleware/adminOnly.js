@@ -1,3 +1,17 @@
+/**
+ * middleware/adminOnly.js — Phân quyền Admin
+ * ────────────────────────────────────────────
+ * Dùng SAU authMiddleware trong chuỗi middleware của route.
+ * Kiểm tra req.user.roles === 1 (User.Roles=1 trong DB = admin).
+ * Nếu không phải admin → trả về 403 Forbidden.
+ *
+ * Cách dùng trong route:
+ *   router.delete('/users/:id', authMiddleware, adminOnly, deleteUser)
+ *
+ * LƯU Ý: import là default export — KHÔNG destructure:
+ *   ✅ const adminOnly = require('../middleware/adminOnly')
+ *   ❌ const { adminOnly } = require('../middleware/adminOnly')  ← bị undefined
+ */
 const { forbidden } = require('../utils/response');
 
 /**

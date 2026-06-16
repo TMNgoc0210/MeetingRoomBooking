@@ -1,3 +1,17 @@
+/**
+ * middleware/auth.js — Xác thực JWT
+ * ────────────────────────────────────
+ * Export 2 middleware:
+ *
+ *   authMiddleware  — bắt buộc đăng nhập
+ *     Đọc header "Authorization: Bearer <token>", verify bằng JWT_SECRET.
+ *     Nếu hợp lệ → gán req.user = { userID, fullName, roles, avatar }, gọi next().
+ *     Nếu thiếu / hết hạn / sai → trả về 401 Unauthorized.
+ *
+ *   optionalAuth    — không bắt buộc đăng nhập
+ *     Nếu có token hợp lệ thì gán req.user, ngược lại bỏ qua (không báo lỗi).
+ *     Dùng cho các route người dùng chưa đăng nhập vẫn xem được (VD: danh sách phòng).
+ */
 const jwt = require('jsonwebtoken');
 const { unauthorized } = require('../utils/response');
 

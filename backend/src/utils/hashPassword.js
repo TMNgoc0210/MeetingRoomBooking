@@ -1,3 +1,17 @@
+/**
+ * utils/hashPassword.js — Mã hoá & xác minh mật khẩu
+ * ─────────────────────────────────────────────────────
+ * Hỗ trợ đồng thời 2 thuật toán để tương thích với hệ thống cũ:
+ *
+ *   bcrypt  (mới) — có built-in salt + cost factor 10 rounds → an toàn, chống brute force
+ *   SHA256  (cũ)  — hash thuần từ hệ thống C# cũ, không có salt → kém an toàn hơn
+ *
+ * Luồng "lazy migration":
+ *   1. User đăng nhập → verifyPassword() thử bcrypt trước
+ *   2. Nếu là hash SHA256 cũ và đúng mật khẩu → trả về needsUpgrade: true
+ *   3. auth.controller.js tự động re-hash bằng bcrypt và lưu lại DB
+ *   → Người dùng không cần đổi mật khẩu, tự nâng cấp sau lần đăng nhập đầu tiên
+ */
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 

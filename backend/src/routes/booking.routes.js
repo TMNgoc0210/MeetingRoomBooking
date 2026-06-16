@@ -1,3 +1,14 @@
+/**
+ * routes/booking.routes.js — Routes đặt phòng & phê duyệt
+ * ──────────────────────────────────────────────────────────
+ * Tóm tắt endpoints:
+ *   POST /api/bookings                   — đặt phòng mới [login]
+ *   PUT  /api/bookings/:id               — sửa booking [login]
+ *   PUT  /api/bookings/:id/approve       — duyệt [admin]
+ *   PUT  /api/bookings/:id/reject        — từ chối (kèm lý do) [admin]
+ *   PUT  /api/bookings/:id/cancel        — huỷ [login]
+ *   GET  /api/bookings/pending           — danh sách chờ duyệt [admin]
+ */
 const express = require('express');
 const router = express.Router();
 const {

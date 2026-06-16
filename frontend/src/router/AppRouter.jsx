@@ -1,3 +1,27 @@
+/**
+ * router/AppRouter.jsx — Định nghĩa tất cả routes của ứng dụng
+ * ───────────────────────────────────────────────────────────────
+ * Sơ đồ route:
+ *
+ *   /                      → Home.jsx          (trang chủ, tìm kiếm phòng)
+ *   /calendar              → CalendarView.jsx  (lịch 3 chế độ)
+ *   /book-detail/:id       → BookDetail.jsx    (chi tiết phòng + calendar)
+ *
+ *   /admin/*  [AdminRoute guard — chỉ Roles=1 mới vào được]
+ *     /admin              → Dashboard.jsx      (stat cards + chart + pending)
+ *     /admin/approvals    → Approvals.jsx      (duyệt lịch VIP)
+ *     /admin/rooms        → Rooms.jsx          (CRUD phòng)
+ *     /admin/areas        → Areas.jsx          (CRUD khu vực)
+ *     /admin/faculties    → Faculties.jsx      (CRUD khoa)
+ *     /admin/users        → Users.jsx          (CRUD người dùng)
+ *     /admin/equipment    → Equipment.jsx      (CRUD thiết bị)
+ *     /admin/roles        → Roles.jsx          (CRUD vai trò)
+ *     /admin/settings     → Settings.jsx       (thiết lập chung)
+ *     /admin/report       → Report.jsx         (báo cáo thống kê)
+ *
+ * AdminRoute: kiểm tra user.Roles === 1, nếu không → redirect về /
+ * AdminLayout: wrapper với sidebar + AdminChatbotWidget, dùng <Outlet> cho nested routes
+ */
 import { Routes, Route, Navigate } from 'react-router-dom'
 import useAuthStore from '../store/authStore'
 import Home from '../pages/Home'

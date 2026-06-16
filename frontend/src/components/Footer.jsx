@@ -38,7 +38,7 @@ const POLICIES = [
       {
         heading: 'Huỷ lịch',
         items: [
-          'Có thể huỷ bất kỳ lúc nào khi cuộc họp chưa bắt đầu.',
+          'Chỉ có thể huỷ trước ít nhất 1 ngày trước giờ họp.',
           'Huỷ quá 5 lần trong 1 tháng có thể bị hạn chế tính năng đặt phòng.',
           'Lịch VIP đã được duyệt cần thông báo admin trước ít nhất 2 giờ.',
         ],

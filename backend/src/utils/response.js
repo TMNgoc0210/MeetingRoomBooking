@@ -1,3 +1,16 @@
+/**
+ * utils/response.js — Chuẩn hoá response trả về cho client
+ * ─────────────────────────────────────────────────────────
+ * Tất cả controller PHẢI dùng các hàm này thay vì gọi res.json() trực tiếp,
+ * đảm bảo mọi response đều có format thống nhất: { success, message, data }
+ *
+ *   success(res, data, message, 200)  — thành công
+ *   error(res, message, 500)          — lỗi server
+ *   notFound(res, message)            — 404 không tìm thấy
+ *   badRequest(res, message)          — 400 dữ liệu sai / thiếu
+ *   unauthorized(res, message)        — 401 chưa đăng nhập / token hết hạn
+ *   forbidden(res, message)           — 403 không đủ quyền
+ */
 const success = (res, data, message = 'Success', statusCode = 200) => {
   return res.status(statusCode).json({
     success: true,

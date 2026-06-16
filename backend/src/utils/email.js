@@ -33,78 +33,56 @@ function formatDatetime(str) {
 }
 
 function buildReminderHtml({ name, title, roomName, areaName, timeStart, timeEnd, minutesBefore }) {
-  const accent = '#c9a96e';
-  const bg = '#1a1612';
-  const card = '#252118';
-  const border = '#3a3020';
-
   return `<!DOCTYPE html>
 <html lang="vi">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:${bg};font-family:'Segoe UI',Arial,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:${bg};padding:32px 0;">
+<body style="margin:0;padding:0;background:#f1f3f4;font-family:Arial,'Helvetica Neue',sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f3f4;padding:32px 0;">
     <tr><td align="center">
-      <table width="560" cellpadding="0" cellspacing="0" style="background:${card};border-radius:12px;border:1px solid ${border};overflow:hidden;">
-        <!-- Header -->
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:4px;border:1px solid #dadce0;overflow:hidden;">
         <tr>
-          <td style="background:${accent};padding:24px 32px;text-align:center;">
-            <div style="font-size:13px;color:#1a1612;font-weight:600;letter-spacing:1px;text-transform:uppercase;">Nhắc lịch họp</div>
-            <div style="font-size:28px;font-weight:700;color:#1a1612;margin-top:4px;">⏰ Còn ${minutesBefore} phút nữa</div>
+          <td style="background:#1a73e8;padding:20px 32px;">
+            <div style="font-size:12px;color:#e8f0fe;letter-spacing:0.5px;text-transform:uppercase;">Nhắc lịch họp</div>
+            <div style="font-size:22px;font-weight:700;color:#ffffff;margin-top:4px;">Còn ${minutesBefore} phút nữa</div>
           </td>
         </tr>
-        <!-- Body -->
         <tr>
           <td style="padding:28px 32px;">
-            <p style="margin:0 0 20px;color:#b0a090;font-size:14px;">Xin chào <strong style="color:#e8d5b0;">${name}</strong>,</p>
-            <p style="margin:0 0 24px;color:#b0a090;font-size:14px;">Cuộc họp của bạn sắp bắt đầu. Đây là thông tin chi tiết:</p>
-
-            <!-- Info card -->
-            <table width="100%" cellpadding="0" cellspacing="0" style="background:#1e1a14;border-radius:8px;border:1px solid ${border};margin-bottom:24px;">
+            <p style="margin:0 0 16px;color:#202124;font-size:14px;">Xin chào <strong>${name}</strong>,</p>
+            <p style="margin:0 0 20px;color:#5f6368;font-size:14px;">Cuộc họp của bạn sắp bắt đầu. Đây là thông tin chi tiết:</p>
+            <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #dadce0;border-radius:4px;margin-bottom:24px;">
               <tr>
-                <td style="padding:20px 24px;">
-                  <div style="font-size:18px;font-weight:700;color:#e8d5b0;margin-bottom:16px;">${title}</div>
-                  <table width="100%" cellpadding="0" cellspacing="0">
-                    <tr>
-                      <td style="padding:6px 0;width:32px;vertical-align:top;">
-                        <span style="font-size:16px;">📍</span>
-                      </td>
-                      <td style="padding:6px 0;vertical-align:top;">
-                        <span style="color:#b0a090;font-size:13px;">Phòng họp</span><br>
-                        <span style="color:#e8d5b0;font-size:14px;font-weight:600;">${roomName}${areaName ? ' — ' + areaName : ''}</span>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style="padding:6px 0;vertical-align:top;">
-                        <span style="font-size:16px;">🕐</span>
-                      </td>
-                      <td style="padding:6px 0;vertical-align:top;">
-                        <span style="color:#b0a090;font-size:13px;">Bắt đầu</span><br>
-                        <span style="color:#e8d5b0;font-size:14px;font-weight:600;">${formatDatetime(timeStart)}</span>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style="padding:6px 0;vertical-align:top;">
-                        <span style="font-size:16px;">🏁</span>
-                      </td>
-                      <td style="padding:6px 0;vertical-align:top;">
-                        <span style="color:#b0a090;font-size:13px;">Kết thúc</span><br>
-                        <span style="color:#e8d5b0;font-size:14px;font-weight:600;">${formatDatetime(timeEnd)}</span>
-                      </td>
-                    </tr>
-                  </table>
+                <td style="padding:16px 20px;border-bottom:1px solid #f1f3f4;">
+                  <div style="font-size:16px;font-weight:700;color:#202124;">${title}</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:12px 20px;border-bottom:1px solid #f1f3f4;">
+                  <div style="font-size:12px;color:#5f6368;margin-bottom:2px;">Phòng họp</div>
+                  <div style="font-size:14px;color:#202124;font-weight:600;">${roomName}${areaName ? ' — ' + areaName : ''}</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:12px 20px;border-bottom:1px solid #f1f3f4;">
+                  <div style="font-size:12px;color:#5f6368;margin-bottom:2px;">Bắt đầu</div>
+                  <div style="font-size:14px;color:#202124;">${formatDatetime(timeStart)}</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:12px 20px;">
+                  <div style="font-size:12px;color:#5f6368;margin-bottom:2px;">Kết thúc</div>
+                  <div style="font-size:14px;color:#202124;">${formatDatetime(timeEnd)}</div>
                 </td>
               </tr>
             </table>
-
-            <p style="margin:0;color:#7a6a55;font-size:12px;text-align:center;">
-              Email này được gửi tự động từ Hệ thống Đặt Phòng Họp.<br>Vui lòng không trả lời email này.
+            <p style="margin:0;color:#9aa0a6;font-size:12px;text-align:center;">
+              Email này được gửi tự động từ Hệ thống Đặt Phòng Họp. Vui lòng không trả lời email này.
             </p>
           </td>
         </tr>
-        <!-- Footer -->
         <tr>
-          <td style="background:#161310;padding:16px 32px;text-align:center;border-top:1px solid ${border};">
-            <span style="color:#5a4a35;font-size:12px;">Smart Meeting Room Booking System</span>
+          <td style="background:#f8f9fa;padding:14px 32px;text-align:center;border-top:1px solid #dadce0;">
+            <span style="color:#9aa0a6;font-size:12px;">Smart Meeting Room Booking System</span>
           </td>
         </tr>
       </table>
@@ -115,81 +93,72 @@ function buildReminderHtml({ name, title, roomName, areaName, timeStart, timeEnd
 }
 
 function buildBookingConfirmHtml({ name, title, roomName, areaName, timeStart, timeEnd, status, totalSlots }) {
-  const accent  = '#c9a96e';
-  const bg      = '#1a1612';
-  const card    = '#252118';
-  const border  = '#3a3020';
-  const isPending  = status === 0;
-  const statusColor = isPending ? '#d97706' : '#16a34a';
-  const statusLabel = isPending ? '⏳ Chờ admin phê duyệt' : '✅ Đặt phòng thành công';
+  const isPending   = status === 0;
+  const headerColor = isPending ? '#f9ab00' : '#1e8e3e';
+  const statusColor = isPending ? '#e37400' : '#1e8e3e';
+  const statusLabel = isPending ? 'Chờ admin phê duyệt' : 'Đặt phòng thành công';
 
   const recurringNote = totalSlots > 1
-    ? `<p style="margin:0 0 16px;color:#b0a090;font-size:13px;">📅 Lịch định kỳ: <strong style="color:#e8d5b0;">${totalSlots} buổi</strong> (từ slot đầu tiên)</p>`
+    ? `<p style="margin:0 0 16px;color:#5f6368;font-size:13px;">Lịch định kỳ: <strong style="color:#202124;">${totalSlots} buổi</strong> (từ slot đầu tiên)</p>`
     : '';
 
   return `<!DOCTYPE html>
 <html lang="vi">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:${bg};font-family:'Segoe UI',Arial,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:${bg};padding:32px 0;">
+<body style="margin:0;padding:0;background:#f1f3f4;font-family:Arial,'Helvetica Neue',sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f3f4;padding:32px 0;">
     <tr><td align="center">
-      <table width="560" cellpadding="0" cellspacing="0" style="background:${card};border-radius:12px;border:1px solid ${border};overflow:hidden;">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:4px;border:1px solid #dadce0;overflow:hidden;">
         <tr>
-          <td style="background:${accent};padding:24px 32px;text-align:center;">
-            <div style="font-size:13px;color:#1a1612;font-weight:600;letter-spacing:1px;text-transform:uppercase;">Xác nhận đặt phòng</div>
-            <div style="font-size:22px;font-weight:700;color:#1a1612;margin-top:4px;">${statusLabel}</div>
+          <td style="background:${headerColor};padding:20px 32px;">
+            <div style="font-size:12px;color:#ffffff;letter-spacing:0.5px;text-transform:uppercase;opacity:0.9;">Xác nhận đặt phòng</div>
+            <div style="font-size:22px;font-weight:700;color:#ffffff;margin-top:4px;">${statusLabel}</div>
           </td>
         </tr>
         <tr>
           <td style="padding:28px 32px;">
-            <p style="margin:0 0 20px;color:#b0a090;font-size:14px;">Xin chào <strong style="color:#e8d5b0;">${name}</strong>,</p>
+            <p style="margin:0 0 16px;color:#202124;font-size:14px;">Xin chào <strong>${name}</strong>,</p>
             ${recurringNote}
-            <table width="100%" cellpadding="0" cellspacing="0" style="background:#1e1a14;border-radius:8px;border:1px solid ${border};margin-bottom:20px;">
+            <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #dadce0;border-radius:4px;margin-bottom:20px;">
               <tr>
-                <td style="padding:20px 24px;">
-                  <div style="font-size:18px;font-weight:700;color:#e8d5b0;margin-bottom:16px;">${title}</div>
-                  <table width="100%" cellpadding="0" cellspacing="0">
-                    <tr>
-                      <td style="padding:5px 0;width:28px;vertical-align:top;font-size:15px;">📍</td>
-                      <td style="padding:5px 0;vertical-align:top;">
-                        <span style="color:#b0a090;font-size:12px;">Phòng họp</span><br>
-                        <span style="color:#e8d5b0;font-size:14px;font-weight:600;">${roomName}${areaName ? ' — ' + areaName : ''}</span>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style="padding:5px 0;vertical-align:top;font-size:15px;">🕐</td>
-                      <td style="padding:5px 0;vertical-align:top;">
-                        <span style="color:#b0a090;font-size:12px;">Bắt đầu</span><br>
-                        <span style="color:#e8d5b0;font-size:14px;font-weight:600;">${formatDatetime(timeStart)}</span>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style="padding:5px 0;vertical-align:top;font-size:15px;">🏁</td>
-                      <td style="padding:5px 0;vertical-align:top;">
-                        <span style="color:#b0a090;font-size:12px;">Kết thúc</span><br>
-                        <span style="color:#e8d5b0;font-size:14px;font-weight:600;">${formatDatetime(timeEnd)}</span>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style="padding:5px 0;vertical-align:top;font-size:15px;">📋</td>
-                      <td style="padding:5px 0;vertical-align:top;">
-                        <span style="color:#b0a090;font-size:12px;">Trạng thái</span><br>
-                        <span style="color:${statusColor};font-size:14px;font-weight:700;">${statusLabel}</span>
-                      </td>
-                    </tr>
-                  </table>
+                <td style="padding:16px 20px;border-bottom:1px solid #f1f3f4;">
+                  <div style="font-size:16px;font-weight:700;color:#202124;">${title}</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:12px 20px;border-bottom:1px solid #f1f3f4;">
+                  <div style="font-size:12px;color:#5f6368;margin-bottom:2px;">Phòng họp</div>
+                  <div style="font-size:14px;color:#202124;font-weight:600;">${roomName}${areaName ? ' — ' + areaName : ''}</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:12px 20px;border-bottom:1px solid #f1f3f4;">
+                  <div style="font-size:12px;color:#5f6368;margin-bottom:2px;">Bắt đầu</div>
+                  <div style="font-size:14px;color:#202124;">${formatDatetime(timeStart)}</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:12px 20px;border-bottom:1px solid #f1f3f4;">
+                  <div style="font-size:12px;color:#5f6368;margin-bottom:2px;">Kết thúc</div>
+                  <div style="font-size:14px;color:#202124;">${formatDatetime(timeEnd)}</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:12px 20px;">
+                  <div style="font-size:12px;color:#5f6368;margin-bottom:2px;">Trạng thái</div>
+                  <div style="font-size:14px;font-weight:700;color:${statusColor};">${statusLabel}</div>
                 </td>
               </tr>
             </table>
-            ${isPending ? `<p style="margin:0 0 16px;color:#d97706;font-size:13px;text-align:center;">Bạn sẽ nhận được email thông báo khi admin phê duyệt hoặc từ chối.</p>` : ''}
-            <p style="margin:0;color:#7a6a55;font-size:12px;text-align:center;">
-              Email này được gửi tự động từ Hệ thống Đặt Phòng Họp.<br>Vui lòng không trả lời email này.
+            ${isPending ? `<p style="margin:0 0 16px;color:#5f6368;font-size:13px;text-align:center;">Bạn sẽ nhận được email thông báo khi admin phê duyệt hoặc từ chối.</p>` : ''}
+            <p style="margin:0;color:#9aa0a6;font-size:12px;text-align:center;">
+              Email này được gửi tự động từ Hệ thống Đặt Phòng Họp. Vui lòng không trả lời email này.
             </p>
           </td>
         </tr>
         <tr>
-          <td style="background:#161310;padding:16px 32px;text-align:center;border-top:1px solid ${border};">
-            <span style="color:#5a4a35;font-size:12px;">Smart Meeting Room Booking System</span>
+          <td style="background:#f8f9fa;padding:14px 32px;text-align:center;border-top:1px solid #dadce0;">
+            <span style="color:#9aa0a6;font-size:12px;">Smart Meeting Room Booking System</span>
           </td>
         </tr>
       </table>
@@ -248,56 +217,58 @@ async function sendReminderEmail(opts) {
 // ─── Invite email gửi cho attendee khi được mời vào booking ─────────────────
 
 function buildAttendeeInviteHtml({ name, organizer, title, roomName, areaName, timeStart, timeEnd }) {
-  const accent = '#c9a96e', bg = '#1a1612', card = '#252118', border = '#3a3020';
   return `<!DOCTYPE html>
 <html lang="vi">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:${bg};font-family:'Segoe UI',Arial,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:${bg};padding:32px 0;">
+<body style="margin:0;padding:0;background:#f1f3f4;font-family:Arial,'Helvetica Neue',sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f3f4;padding:32px 0;">
     <tr><td align="center">
-      <table width="560" cellpadding="0" cellspacing="0" style="background:${card};border-radius:12px;border:1px solid ${border};overflow:hidden;">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:4px;border:1px solid #dadce0;overflow:hidden;">
         <tr>
-          <td style="background:${accent};padding:24px 32px;text-align:center;">
-            <div style="font-size:13px;color:#1a1612;font-weight:600;letter-spacing:1px;text-transform:uppercase;">Lời mời tham dự</div>
-            <div style="font-size:24px;font-weight:700;color:#1a1612;margin-top:4px;">📩 Bạn được mời họp</div>
+          <td style="background:#1a73e8;padding:20px 32px;">
+            <div style="font-size:12px;color:#e8f0fe;letter-spacing:0.5px;text-transform:uppercase;">Lời mời tham dự</div>
+            <div style="font-size:22px;font-weight:700;color:#ffffff;margin-top:4px;">Bạn được mời họp</div>
           </td>
         </tr>
         <tr>
           <td style="padding:28px 32px;">
-            <p style="margin:0 0 8px;color:#b0a090;font-size:14px;">Xin chào <strong style="color:#e8d5b0;">${name}</strong>,</p>
-            <p style="margin:0 0 20px;color:#b0a090;font-size:14px;">
-              <strong style="color:#e8d5b0;">${organizer}</strong> đã mời bạn tham dự cuộc họp sau:
+            <p style="margin:0 0 8px;color:#202124;font-size:14px;">Xin chào <strong>${name}</strong>,</p>
+            <p style="margin:0 0 20px;color:#5f6368;font-size:14px;">
+              <strong style="color:#202124;">${organizer}</strong> đã mời bạn tham dự cuộc họp sau:
             </p>
-            <table width="100%" cellpadding="0" cellspacing="0" style="background:#1e1a14;border-radius:8px;border:1px solid ${border};margin-bottom:20px;">
-              <tr><td style="padding:20px 24px;">
-                <div style="font-size:18px;font-weight:700;color:#e8d5b0;margin-bottom:16px;">${title}</div>
-                <table width="100%" cellpadding="0" cellspacing="0">
-                  <tr>
-                    <td style="padding:5px 0;width:28px;font-size:15px;">📍</td>
-                    <td style="padding:5px 0;"><span style="color:#b0a090;font-size:12px;">Phòng họp</span><br>
-                      <span style="color:#e8d5b0;font-size:14px;font-weight:600;">${roomName}${areaName ? ' — ' + areaName : ''}</span></td>
-                  </tr>
-                  <tr>
-                    <td style="padding:5px 0;font-size:15px;">🕐</td>
-                    <td style="padding:5px 0;"><span style="color:#b0a090;font-size:12px;">Bắt đầu</span><br>
-                      <span style="color:#e8d5b0;font-size:14px;font-weight:600;">${formatDatetime(timeStart)}</span></td>
-                  </tr>
-                  <tr>
-                    <td style="padding:5px 0;font-size:15px;">🏁</td>
-                    <td style="padding:5px 0;"><span style="color:#b0a090;font-size:12px;">Kết thúc</span><br>
-                      <span style="color:#e8d5b0;font-size:14px;font-weight:600;">${formatDatetime(timeEnd)}</span></td>
-                  </tr>
-                </table>
-              </td></tr>
+            <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #dadce0;border-radius:4px;margin-bottom:20px;">
+              <tr>
+                <td style="padding:16px 20px;border-bottom:1px solid #f1f3f4;">
+                  <div style="font-size:16px;font-weight:700;color:#202124;">${title}</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:12px 20px;border-bottom:1px solid #f1f3f4;">
+                  <div style="font-size:12px;color:#5f6368;margin-bottom:2px;">Phòng họp</div>
+                  <div style="font-size:14px;color:#202124;font-weight:600;">${roomName}${areaName ? ' — ' + areaName : ''}</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:12px 20px;border-bottom:1px solid #f1f3f4;">
+                  <div style="font-size:12px;color:#5f6368;margin-bottom:2px;">Bắt đầu</div>
+                  <div style="font-size:14px;color:#202124;">${formatDatetime(timeStart)}</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:12px 20px;">
+                  <div style="font-size:12px;color:#5f6368;margin-bottom:2px;">Kết thúc</div>
+                  <div style="font-size:14px;color:#202124;">${formatDatetime(timeEnd)}</div>
+                </td>
+              </tr>
             </table>
-            <p style="margin:0;color:#7a6a55;font-size:12px;text-align:center;">
-              Email này được gửi tự động từ Hệ thống Đặt Phòng Họp.<br>Vui lòng không trả lời email này.
+            <p style="margin:0;color:#9aa0a6;font-size:12px;text-align:center;">
+              Email này được gửi tự động từ Hệ thống Đặt Phòng Họp. Vui lòng không trả lời email này.
             </p>
           </td>
         </tr>
         <tr>
-          <td style="background:#161310;padding:16px 32px;text-align:center;border-top:1px solid ${border};">
-            <span style="color:#5a4a35;font-size:12px;">Smart Meeting Room Booking System</span>
+          <td style="background:#f8f9fa;padding:14px 32px;text-align:center;border-top:1px solid #dadce0;">
+            <span style="color:#9aa0a6;font-size:12px;">Smart Meeting Room Booking System</span>
           </td>
         </tr>
       </table>
@@ -325,54 +296,60 @@ function formatFileSize(bytes) {
 }
 
 function buildNewAttachmentHtml({ name, organizer, title, roomName, areaName, timeStart, timeEnd, fileName, fileSize }) {
-  const accent = '#c9a96e', bg = '#1a1612', card = '#252118', border = '#3a3020';
   return `<!DOCTYPE html>
 <html lang="vi">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:${bg};font-family:'Segoe UI',Arial,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:${bg};padding:32px 0;">
+<body style="margin:0;padding:0;background:#f1f3f4;font-family:Arial,'Helvetica Neue',sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f3f4;padding:32px 0;">
     <tr><td align="center">
-      <table width="560" cellpadding="0" cellspacing="0" style="background:${card};border-radius:12px;border:1px solid ${border};overflow:hidden;">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:4px;border:1px solid #dadce0;overflow:hidden;">
         <tr>
-          <td style="background:${accent};padding:24px 32px;text-align:center;">
-            <div style="font-size:13px;color:#1a1612;font-weight:600;letter-spacing:1px;text-transform:uppercase;">Tài liệu mới</div>
-            <div style="font-size:22px;font-weight:700;color:#1a1612;margin-top:4px;">📎 Tài liệu họp đã được đính kèm</div>
+          <td style="background:#1a73e8;padding:20px 32px;">
+            <div style="font-size:12px;color:#e8f0fe;letter-spacing:0.5px;text-transform:uppercase;">Tài liệu mới</div>
+            <div style="font-size:22px;font-weight:700;color:#ffffff;margin-top:4px;">Tài liệu họp đã được đính kèm</div>
           </td>
         </tr>
         <tr>
           <td style="padding:28px 32px;">
-            <p style="margin:0 0 8px;color:#b0a090;font-size:14px;">Xin chào <strong style="color:#e8d5b0;">${name}</strong>,</p>
-            <p style="margin:0 0 20px;color:#b0a090;font-size:14px;">
-              <strong style="color:#e8d5b0;">${organizer}</strong> vừa đính kèm tài liệu mới cho cuộc họp:
+            <p style="margin:0 0 8px;color:#202124;font-size:14px;">Xin chào <strong>${name}</strong>,</p>
+            <p style="margin:0 0 20px;color:#5f6368;font-size:14px;">
+              <strong style="color:#202124;">${organizer}</strong> vừa đính kèm tài liệu mới cho cuộc họp:
             </p>
-            <!-- File box -->
-            <table width="100%" cellpadding="0" cellspacing="0" style="background:#1e1a14;border-radius:8px;border:1px solid #c9a96e44;margin-bottom:16px;">
-              <tr><td style="padding:16px 20px;">
-                <div style="display:flex;align-items:center;gap:12px;">
-                  <span style="font-size:28px;">📄</span>
-                  <div>
-                    <div style="color:#e8d5b0;font-size:14px;font-weight:700;">${fileName}</div>
-                    ${fileSize ? `<div style="color:#7a6a55;font-size:12px;margin-top:2px;">${formatFileSize(fileSize)}</div>` : ''}
-                  </div>
-                </div>
-              </td></tr>
+            <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #dadce0;border-radius:4px;margin-bottom:16px;">
+              <tr>
+                <td style="padding:14px 20px;">
+                  <div style="font-size:14px;font-weight:700;color:#202124;">${fileName}</div>
+                  ${fileSize ? `<div style="color:#5f6368;font-size:12px;margin-top:3px;">${formatFileSize(fileSize)}</div>` : ''}
+                </td>
+              </tr>
             </table>
-            <!-- Booking info -->
-            <table width="100%" cellpadding="0" cellspacing="0" style="background:#1e1a14;border-radius:8px;border:1px solid ${border};margin-bottom:20px;">
-              <tr><td style="padding:16px 20px;">
-                <div style="font-size:15px;font-weight:700;color:#e8d5b0;margin-bottom:10px;">${title}</div>
-                <div style="color:#b0a090;font-size:13px;">📍 ${roomName}${areaName ? ' — ' + areaName : ''}</div>
-                <div style="color:#b0a090;font-size:13px;margin-top:4px;">🕐 ${formatDatetime(timeStart)} → ${formatDatetime(timeEnd)}</div>
-              </td></tr>
+            <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #dadce0;border-radius:4px;margin-bottom:20px;">
+              <tr>
+                <td style="padding:16px 20px;border-bottom:1px solid #f1f3f4;">
+                  <div style="font-size:15px;font-weight:700;color:#202124;">${title}</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:12px 20px;border-bottom:1px solid #f1f3f4;">
+                  <div style="font-size:12px;color:#5f6368;margin-bottom:2px;">Phòng họp</div>
+                  <div style="font-size:14px;color:#202124;">${roomName}${areaName ? ' — ' + areaName : ''}</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:12px 20px;">
+                  <div style="font-size:12px;color:#5f6368;margin-bottom:2px;">Thời gian</div>
+                  <div style="font-size:14px;color:#202124;">${formatDatetime(timeStart)} — ${formatDatetime(timeEnd)}</div>
+                </td>
+              </tr>
             </table>
-            <p style="margin:0;color:#7a6a55;font-size:12px;text-align:center;">
-              Đăng nhập vào hệ thống để tải tài liệu về.<br>Email này được gửi tự động, vui lòng không trả lời.
+            <p style="margin:0;color:#9aa0a6;font-size:12px;text-align:center;">
+              Đăng nhập vào hệ thống để tải tài liệu về. Email này được gửi tự động, vui lòng không trả lời.
             </p>
           </td>
         </tr>
         <tr>
-          <td style="background:#161310;padding:16px 32px;text-align:center;border-top:1px solid ${border};">
-            <span style="color:#5a4a35;font-size:12px;">Smart Meeting Room Booking System</span>
+          <td style="background:#f8f9fa;padding:14px 32px;text-align:center;border-top:1px solid #dadce0;">
+            <span style="color:#9aa0a6;font-size:12px;">Smart Meeting Room Booking System</span>
           </td>
         </tr>
       </table>
@@ -393,18 +370,16 @@ async function sendNewAttachmentEmail(opts) {
 // ─── Thông báo kết quả duyệt (approved / rejected) ───────────────────────────
 
 function buildBookingStatusHtml({ name, title, roomName, areaName, timeStart, timeEnd, approved, rejectReason }) {
-  const accent = approved ? '#16a34a' : '#dc2626';
-  const bg = '#1a1612', card = '#252118', border = '#3a3020';
-  const icon    = approved ? '✅' : '❌';
-  const label   = approved ? 'Lịch đặt đã được PHÊ DUYỆT' : 'Lịch đặt bị TỪ CHỐI';
+  const headerColor = approved ? '#1e8e3e' : '#d93025';
+  const label   = approved ? 'Lịch đặt đã được phê duyệt' : 'Lịch đặt bị từ chối';
   const subline = approved ? 'Cuộc họp của bạn đã được admin phê duyệt. Chuẩn bị tốt cho buổi họp nhé!'
                            : 'Rất tiếc, yêu cầu đặt phòng của bạn đã bị từ chối.';
 
   const rejectBlock = !approved && rejectReason
-    ? `<table width="100%" cellpadding="0" cellspacing="0" style="background:#2a1010;border-radius:8px;border:1px solid #7f1d1d;margin-bottom:20px;">
-        <tr><td style="padding:16px 20px;">
-          <div style="color:#fca5a5;font-size:13px;font-weight:700;margin-bottom:6px;">Lý do từ chối:</div>
-          <div style="color:#fecaca;font-size:14px;">${rejectReason}</div>
+    ? `<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #fad2cf;border-radius:4px;background:#fef7f6;margin-bottom:20px;">
+        <tr><td style="padding:14px 20px;">
+          <div style="color:#c5221f;font-size:13px;font-weight:700;margin-bottom:6px;">Lý do từ chối</div>
+          <div style="color:#202124;font-size:14px;">${rejectReason}</div>
         </td></tr>
        </table>`
     : '';
@@ -412,51 +387,54 @@ function buildBookingStatusHtml({ name, title, roomName, areaName, timeStart, ti
   return `<!DOCTYPE html>
 <html lang="vi">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:${bg};font-family:'Segoe UI',Arial,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:${bg};padding:32px 0;">
+<body style="margin:0;padding:0;background:#f1f3f4;font-family:Arial,'Helvetica Neue',sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f1f3f4;padding:32px 0;">
     <tr><td align="center">
-      <table width="560" cellpadding="0" cellspacing="0" style="background:${card};border-radius:12px;border:1px solid ${border};overflow:hidden;">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:4px;border:1px solid #dadce0;overflow:hidden;">
         <tr>
-          <td style="background:${accent};padding:24px 32px;text-align:center;">
-            <div style="font-size:13px;color:#fff;font-weight:600;letter-spacing:1px;text-transform:uppercase;opacity:0.85;">Kết quả phê duyệt</div>
-            <div style="font-size:22px;font-weight:700;color:#fff;margin-top:4px;">${icon} ${label}</div>
+          <td style="background:${headerColor};padding:20px 32px;">
+            <div style="font-size:12px;color:#ffffff;letter-spacing:0.5px;text-transform:uppercase;opacity:0.9;">Kết quả phê duyệt</div>
+            <div style="font-size:22px;font-weight:700;color:#ffffff;margin-top:4px;">${label}</div>
           </td>
         </tr>
         <tr>
           <td style="padding:28px 32px;">
-            <p style="margin:0 0 8px;color:#b0a090;font-size:14px;">Xin chào <strong style="color:#e8d5b0;">${name}</strong>,</p>
-            <p style="margin:0 0 20px;color:#b0a090;font-size:14px;">${subline}</p>
-            <table width="100%" cellpadding="0" cellspacing="0" style="background:#1e1a14;border-radius:8px;border:1px solid ${border};margin-bottom:20px;">
-              <tr><td style="padding:20px 24px;">
-                <div style="font-size:18px;font-weight:700;color:#e8d5b0;margin-bottom:16px;">${title}</div>
-                <table width="100%" cellpadding="0" cellspacing="0">
-                  <tr>
-                    <td style="padding:5px 0;width:28px;font-size:15px;">📍</td>
-                    <td style="padding:5px 0;"><span style="color:#b0a090;font-size:12px;">Phòng họp</span><br>
-                      <span style="color:#e8d5b0;font-size:14px;font-weight:600;">${roomName}${areaName ? ' — ' + areaName : ''}</span></td>
-                  </tr>
-                  <tr>
-                    <td style="padding:5px 0;font-size:15px;">🕐</td>
-                    <td style="padding:5px 0;"><span style="color:#b0a090;font-size:12px;">Bắt đầu</span><br>
-                      <span style="color:#e8d5b0;font-size:14px;font-weight:600;">${formatDatetime(timeStart)}</span></td>
-                  </tr>
-                  <tr>
-                    <td style="padding:5px 0;font-size:15px;">🏁</td>
-                    <td style="padding:5px 0;"><span style="color:#b0a090;font-size:12px;">Kết thúc</span><br>
-                      <span style="color:#e8d5b0;font-size:14px;font-weight:600;">${formatDatetime(timeEnd)}</span></td>
-                  </tr>
-                </table>
-              </td></tr>
+            <p style="margin:0 0 8px;color:#202124;font-size:14px;">Xin chào <strong>${name}</strong>,</p>
+            <p style="margin:0 0 20px;color:#5f6368;font-size:14px;">${subline}</p>
+            <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #dadce0;border-radius:4px;margin-bottom:20px;">
+              <tr>
+                <td style="padding:16px 20px;border-bottom:1px solid #f1f3f4;">
+                  <div style="font-size:16px;font-weight:700;color:#202124;">${title}</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:12px 20px;border-bottom:1px solid #f1f3f4;">
+                  <div style="font-size:12px;color:#5f6368;margin-bottom:2px;">Phòng họp</div>
+                  <div style="font-size:14px;color:#202124;font-weight:600;">${roomName}${areaName ? ' — ' + areaName : ''}</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:12px 20px;border-bottom:1px solid #f1f3f4;">
+                  <div style="font-size:12px;color:#5f6368;margin-bottom:2px;">Bắt đầu</div>
+                  <div style="font-size:14px;color:#202124;">${formatDatetime(timeStart)}</div>
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:12px 20px;">
+                  <div style="font-size:12px;color:#5f6368;margin-bottom:2px;">Kết thúc</div>
+                  <div style="font-size:14px;color:#202124;">${formatDatetime(timeEnd)}</div>
+                </td>
+              </tr>
             </table>
             ${rejectBlock}
-            <p style="margin:0;color:#7a6a55;font-size:12px;text-align:center;">
-              Email này được gửi tự động từ Hệ thống Đặt Phòng Họp.<br>Vui lòng không trả lời email này.
+            <p style="margin:0;color:#9aa0a6;font-size:12px;text-align:center;">
+              Email này được gửi tự động từ Hệ thống Đặt Phòng Họp. Vui lòng không trả lời email này.
             </p>
           </td>
         </tr>
         <tr>
-          <td style="background:#161310;padding:16px 32px;text-align:center;border-top:1px solid ${border};">
-            <span style="color:#5a4a35;font-size:12px;">Smart Meeting Room Booking System</span>
+          <td style="background:#f8f9fa;padding:14px 32px;text-align:center;border-top:1px solid #dadce0;">
+            <span style="color:#9aa0a6;font-size:12px;">Smart Meeting Room Booking System</span>
           </td>
         </tr>
       </table>

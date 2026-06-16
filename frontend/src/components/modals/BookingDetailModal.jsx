@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { lineRoomService, attachmentService } from '../../services'
+import { lineRoomService, attachmentService, bookingService } from '../../services'
 import api from '../../services/api'
 import dayjs from 'dayjs'
 import useUIStore from '../../store/uiStore'
@@ -70,6 +70,26 @@ const BookingDetailModal = () => {
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
   }
 
+  const handleCancel = async () => {
+    if (!data) return
+    if (!isAdmin()) {
+      const hoursLeft = dayjs(data.TimeStart).diff(dayjs(), 'hour')
+      if (hoursLeft < 24) {
+        toast.error('Chỉ có thể huỷ trước ít nhất 1 ngày trước giờ họp')
+        return
+      }
+    }
+    if (!window.confirm('Xác nhận huỷ lịch đặt phòng này?')) return
+    try {
+      await bookingService.cancel(detailModal.lineRoomID)
+      toast.success('Đã huỷ lịch đặt phòng')
+      closeDetailModal()
+      useUIStore.getState().triggerRefresh()
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Huỷ thất bại')
+    }
+  }
+
   const handleDelete = async () => {
     if (!window.confirm('Xác nhận xoá lịch đặt phòng này?')) return
     try {
@@ -85,6 +105,8 @@ const BookingDetailModal = () => {
   if (!detailModal.open) return null
 
   const canEdit = data && (isAdmin() || user?.UserID === data.UserID)
+  // Có thể huỷ khi: chủ booking/admin, status chưa phải Cancelled(3) hoặc Rejected(2)
+  const canCancel = canEdit && data && data.Status !== 3 && data.Status !== 2
 
   return (
     <div className="modal-overlay" onClick={closeDetailModal}>
@@ -198,14 +220,24 @@ const BookingDetailModal = () => {
             </div>
           )}
         </div>
-        {canEdit && (
+        {(canEdit || canCancel) && (
           <div className="modal-footer">
-            <button className="btn btn-danger btn-sm" onClick={handleDelete}>
-              <i className="fa fa-trash" /> Xoá
-            </button>
-            <button className="btn btn-primary btn-sm" onClick={() => { closeDetailModal(); openEditBookingModal(detailModal.lineRoomID) }}>
-              <i className="fa fa-edit" /> Chỉnh sửa
-            </button>
+            {isAdmin() && (
+              <button className="btn btn-danger btn-sm" onClick={handleDelete}>
+                <i className="fa fa-trash" /> Xoá
+              </button>
+            )}
+            {canCancel && (
+              <button className="btn btn-secondary btn-sm" onClick={handleCancel}
+                style={{ color: 'var(--warning)', borderColor: 'var(--warning)' }}>
+                <i className="fa fa-ban" /> Huỷ phòng
+              </button>
+            )}
+            {canEdit && data?.Status !== 3 && data?.Status !== 2 && (
+              <button className="btn btn-primary btn-sm" onClick={() => { closeDetailModal(); openEditBookingModal(detailModal.lineRoomID) }}>
+                <i className="fa fa-edit" /> Chỉnh sửa
+              </button>
+            )}
           </div>
         )}
       </div>
