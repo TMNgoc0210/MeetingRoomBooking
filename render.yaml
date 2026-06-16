@@ -2,13 +2,8 @@ services:
   - type: web
     name: meeting-booking
     runtime: node
-    rootDir: backend
-    buildCommand: >
-      cd ../frontend && npm ci && npm run build &&
-      mkdir -p ../backend/public &&
-      cp -r dist/* ../backend/public/ &&
-      cd ../backend && npm ci
-    startCommand: node server.js
+    buildCommand: cd frontend && npm ci && npm run build && cd .. && mkdir -p backend/public && cp -r frontend/dist/* backend/public/ && cd backend && npm ci
+    startCommand: node backend/server.js
     plan: free
     envVars:
       - key: NODE_ENV
