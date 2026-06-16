@@ -1,21 +1,44 @@
 const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 
 let _transporter = null;
+let _resend = null;
+
+// Resend dùng HTTPS API — không bị Render chặn như SMTP port 587
+function getResend() {
+  if (!process.env.RESEND_API_KEY) return null;
+  if (!_resend) _resend = new Resend(process.env.RESEND_API_KEY);
+  return _resend;
+}
 
 function getTransporter() {
   if (_transporter) return _transporter;
   if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) return null;
-
   _transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port: parseInt(process.env.SMTP_PORT) || 587,
     secure: parseInt(process.env.SMTP_PORT) === 465,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
+    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+    connectionTimeout: 8000,
+    greetingTimeout: 8000,
+    socketTimeout: 10000,
   });
   return _transporter;
+}
+
+// Gửi email qua Resend (ưu tiên) hoặc nodemailer (fallback local)
+async function sendEmail({ to, subject, html }) {
+  const resend = getResend();
+  if (resend) {
+    const from = process.env.RESEND_FROM || 'Hệ thống Đặt Phòng Họp <onboarding@resend.dev>';
+    const { error } = await resend.emails.send({ from, to, subject, html });
+    if (error) throw new Error(error.message);
+    return;
+  }
+  const t = getTransporter();
+  if (!t) return;
+  const from = process.env.SMTP_FROM || `"Hệ thống Đặt Phòng Họp" <${process.env.SMTP_USER}>`;
+  await t.sendMail({ from, to, subject, html });
 }
 
 function formatDatetime(str) {
@@ -169,20 +192,10 @@ function buildBookingConfirmHtml({ name, title, roomName, areaName, timeStart, t
 }
 
 async function sendBookingConfirmEmail(opts) {
-  const t = getTransporter();
-  if (!t) return;
-  const { to, name, title, status } = opts;
+  const { to, title, status } = opts;
   if (!to || !to.includes('@')) return;
-
-  const from        = process.env.SMTP_FROM || `"Hệ thống Đặt Phòng Họp" <${process.env.SMTP_USER}>`;
   const statusLabel = status === 0 ? 'Chờ phê duyệt' : 'Đặt phòng thành công';
-
-  await t.sendMail({
-    from,
-    to,
-    subject: `[${statusLabel}] ${title}`,
-    html: buildBookingConfirmHtml(opts),
-  });
+  await sendEmail({ to, subject: `[${statusLabel}] ${title}`, html: buildBookingConfirmHtml(opts) });
 }
 
 /**
@@ -198,20 +211,9 @@ async function sendBookingConfirmEmail(opts) {
  * @param {number} opts.minutesBefore - còn bao nhiêu phút
  */
 async function sendReminderEmail(opts) {
-  const t = getTransporter();
-  if (!t) return; // SMTP chưa cấu hình — bỏ qua
-
-  const { to, name, title, minutesBefore } = opts;
+  const { to, title, minutesBefore } = opts;
   if (!to || !to.includes('@')) return;
-
-  const from = process.env.SMTP_FROM || `"Hệ thống Đặt Phòng Họp" <${process.env.SMTP_USER}>`;
-
-  await t.sendMail({
-    from,
-    to,
-    subject: `[Nhắc lịch] ${title} — còn ${minutesBefore} phút nữa`,
-    html: buildReminderHtml(opts),
-  });
+  await sendEmail({ to, subject: `[Nhắc lịch] ${title} — còn ${minutesBefore} phút nữa`, html: buildReminderHtml(opts) });
 }
 
 // ─── Invite email gửi cho attendee khi được mời vào booking ─────────────────
@@ -278,12 +280,9 @@ function buildAttendeeInviteHtml({ name, organizer, title, roomName, areaName, t
 }
 
 async function sendAttendeeInviteEmail(opts) {
-  const t = getTransporter();
-  if (!t) return;
   const { to, title } = opts;
   if (!to || !to.includes('@')) return;
-  const from = process.env.SMTP_FROM || `"Hệ thống Đặt Phòng Họp" <${process.env.SMTP_USER}>`;
-  await t.sendMail({ from, to, subject: `[Lời mời họp] ${title}`, html: buildAttendeeInviteHtml(opts) });
+  await sendEmail({ to, subject: `[Lời mời họp] ${title}`, html: buildAttendeeInviteHtml(opts) });
 }
 
 // ─── Notification khi có tài liệu mới đính kèm ───────────────────────────────
@@ -359,12 +358,9 @@ function buildNewAttachmentHtml({ name, organizer, title, roomName, areaName, ti
 }
 
 async function sendNewAttachmentEmail(opts) {
-  const t = getTransporter();
-  if (!t) return;
   const { to, title, fileName } = opts;
   if (!to || !to.includes('@')) return;
-  const from = process.env.SMTP_FROM || `"Hệ thống Đặt Phòng Họp" <${process.env.SMTP_USER}>`;
-  await t.sendMail({ from, to, subject: `[Tài liệu mới] ${fileName} — ${title}`, html: buildNewAttachmentHtml(opts) });
+  await sendEmail({ to, subject: `[Tài liệu mới] ${fileName} — ${title}`, html: buildNewAttachmentHtml(opts) });
 }
 
 // ─── Thông báo kết quả duyệt (approved / rejected) ───────────────────────────
@@ -444,13 +440,10 @@ function buildBookingStatusHtml({ name, title, roomName, areaName, timeStart, ti
 }
 
 async function sendBookingStatusEmail(opts) {
-  const t = getTransporter();
-  if (!t) return;
   const { to, title, approved } = opts;
   if (!to || !to.includes('@')) return;
-  const from    = process.env.SMTP_FROM || `"Hệ thống Đặt Phòng Họp" <${process.env.SMTP_USER}>`;
   const subject = approved ? `[Đã duyệt] ${title}` : `[Từ chối] ${title}`;
-  await t.sendMail({ from, to, subject, html: buildBookingStatusHtml(opts) });
+  await sendEmail({ to, subject, html: buildBookingStatusHtml(opts) });
 }
 
 module.exports = { sendReminderEmail, sendBookingConfirmEmail, sendAttendeeInviteEmail, sendNewAttachmentEmail, sendBookingStatusEmail };
