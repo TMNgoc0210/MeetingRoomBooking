@@ -15,23 +15,23 @@ services:
         value: production
       - key: PORT
         value: 5001
-      - key: DB_SERVER
+      - key: DATABASE_URL
         sync: false
-      - key: DB_PORT
-        value: 1433
-      - key: DB_NAME
-        value: MeetingRoomBooking
-      - key: DB_USER
-        sync: false
-      - key: DB_PASSWORD
-        sync: false
-      - key: DB_ENCRYPT
-        value: "true"
       - key: CLIENT_URL
         sync: false
       - key: JWT_SECRET
         sync: false
       - key: JWT_REFRESH_SECRET
         sync: false
+      - key: SHOPAIKEY_API_KEY
+        sync: false
       - key: GEMINI_API_KEY
         sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: REMINDER_MINUTES_BEFORE
+        value: "30"

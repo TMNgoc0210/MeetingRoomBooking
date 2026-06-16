@@ -23,11 +23,11 @@
     "jsonwebtoken": "^9.0.2",
     "langchain": "^1.4.0",
     "morgan": "^1.10.0",
-    "mssql": "^11.0.1",
     "multer": "^1.4.5-lts.1",
     "node-cron": "^4.2.1",
     "nodemailer": "^8.0.8",
-    "openai": "^4.47.1"
+    "openai": "^4.47.1",
+    "pg": "^8.21.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.3"

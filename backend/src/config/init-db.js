@@ -1,294 +1,268 @@
 /**
- * init-db.js — Tạo schema SQL Server và seed dữ liệu mẫu
+ * init-db.js — Tạo schema PostgreSQL và seed dữ liệu mẫu
  * Chạy: node src/config/init-db.js
- * Lưu ý: bỏ qua seed nếu đã có data (idempotent về dữ liệu).
+ * Idempotent: bỏ qua nếu bảng/dữ liệu đã tồn tại.
  */
-const sql = require('mssql');
+const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '../../.env') });
 
-const DB_NAME = process.env.DB_NAME || 'MeetingRoomBooking';
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL?.includes('localhost')
+    ? false
+    : { rejectUnauthorized: false },
+});
 
-const baseConfig = {
-  server:   process.env.DB_SERVER   || 'localhost',
-  port:     parseInt(process.env.DB_PORT) || 1433,
-  user:     process.env.DB_USER     || 'sa',
-  password: process.env.DB_PASSWORD || '',
-  options:  {
-    encrypt:                process.env.DB_ENCRYPT === 'true',
-    trustServerCertificate: process.env.DB_ENCRYPT !== 'true',
-    enableArithAbort:       true,
-  },
-};
+async function run(sqlStr, values = []) {
+  return pool.query(sqlStr, values);
+}
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-let _pool;
-function bind(req, params) {
-  for (const [k, v] of Object.entries(params || {})) {
-    if (v === null || v === undefined) req.input(k, sql.NVarChar, null);
-    else if (Number.isInteger(v))       req.input(k, sql.Int, v);
-    else                                req.input(k, sql.NVarChar(sql.MAX), String(v));
+async function ins(sqlStr, values = []) {
+  const res = await pool.query(sqlStr + ' RETURNING *', values);
+  // Trả về ID của row vừa insert (column đầu tiên kết thúc bằng 'id')
+  const row = res.rows[0] || {};
+  for (const [k, v] of Object.entries(row)) {
+    if (/id$/i.test(k) && Number.isInteger(v)) return v;
   }
-}
-async function run(sqlStr, params = {}) {
-  const req = _pool.request();
-  bind(req, params);
-  return req.query(sqlStr);
-}
-async function ins(sqlStr, params = {}) {
-  const req = _pool.request();
-  bind(req, params);
-  const result = await req.query(`${sqlStr}; SELECT SCOPE_IDENTITY() AS id`);
-  return parseInt(result.recordset[0].id);
+  return null;
 }
 
-// ─── Main ─────────────────────────────────────────────────────────────────────
 async function main() {
-  console.log(`📦 Connecting to SQL Server: ${baseConfig.server}`);
+  console.log('📦 Connecting to PostgreSQL...');
 
-  // SKIP_CREATE_DB=true khi dùng hosted DB (freesqldatabase, Azure) đã có sẵn DB
-  if (process.env.SKIP_CREATE_DB !== 'true') {
-    const masterPool = await sql.connect({ ...baseConfig, database: 'master' });
-    await masterPool.request().query(`
-      IF NOT EXISTS (SELECT name FROM sys.databases WHERE name = N'${DB_NAME}')
-        CREATE DATABASE [${DB_NAME}]
-    `);
-    await masterPool.close();
-  }
-  console.log(`✅ Database [${DB_NAME}] ready`);
-
-  // Kết nối vào database đích
-  _pool = await sql.connect({ ...baseConfig, database: DB_NAME });
+  // ─── Create tables ────────────────────────────────────────────────────────
   console.log('\n📋 Creating tables...');
 
   await run(`
-    IF OBJECT_ID('Faculty','U') IS NULL
-    CREATE TABLE Faculty (
-      FacultyID   INT           IDENTITY(1,1) NOT NULL PRIMARY KEY,
-      FacultyName NVARCHAR(200) NOT NULL,
-      Avatar      NVARCHAR(MAX) DEFAULT '',
-      [Desc]      NVARCHAR(MAX) DEFAULT '',
-      Visible     INT           DEFAULT 1,
-      CreateDate  NVARCHAR(20)  DEFAULT '',
-      CreateBy    NVARCHAR(100) DEFAULT 'admin'
+    CREATE TABLE IF NOT EXISTS Faculty (
+      "FacultyID"   SERIAL PRIMARY KEY,
+      "FacultyName" VARCHAR(200) NOT NULL,
+      "Avatar"      TEXT DEFAULT '',
+      "Desc"        TEXT DEFAULT '',
+      "Visible"     INTEGER DEFAULT 1,
+      "CreateDate"  VARCHAR(20) DEFAULT '',
+      "CreateBy"    VARCHAR(100) DEFAULT 'admin'
     )
   `);
   console.log('  ✅ Faculty');
 
   await run(`
-    IF OBJECT_ID('[User]','U') IS NULL
-    CREATE TABLE [User] (
-      UserID     NVARCHAR(100) NOT NULL PRIMARY KEY,
-      FullName   NVARCHAR(200) NOT NULL,
-      Password   NVARCHAR(255) NOT NULL,
-      FacultyID  INT           REFERENCES Faculty(FacultyID),
-      Mobi       NVARCHAR(50)  DEFAULT '',
-      Email      NVARCHAR(200) DEFAULT '',
-      Avatar     NVARCHAR(MAX) DEFAULT '/uploads/images/nopic.png',
-      Visible    INT           DEFAULT 1,
-      Roles      INT           DEFAULT 0,
-      CreateDate NVARCHAR(20)  DEFAULT '',
-      CreateBy   NVARCHAR(100) DEFAULT 'admin'
+    CREATE TABLE IF NOT EXISTS "User" (
+      "UserID"     VARCHAR(100) NOT NULL PRIMARY KEY,
+      "FullName"   VARCHAR(200) NOT NULL,
+      "Password"   VARCHAR(255) NOT NULL,
+      "FacultyID"  INTEGER REFERENCES Faculty("FacultyID"),
+      "Mobi"       VARCHAR(50)  DEFAULT '',
+      "Email"      VARCHAR(200) DEFAULT '',
+      "Avatar"     TEXT DEFAULT '/uploads/images/nopic.png',
+      "Visible"    INTEGER DEFAULT 1,
+      "Roles"      INTEGER DEFAULT 0,
+      "CreateDate" VARCHAR(20)  DEFAULT '',
+      "CreateBy"   VARCHAR(100) DEFAULT 'admin'
     )
   `);
-  console.log('  ✅ [User]');
+  console.log('  ✅ User');
 
   await run(`
-    IF OBJECT_ID('Area','U') IS NULL
-    CREATE TABLE Area (
-      AreaID     INT           IDENTITY(1,1) NOT NULL PRIMARY KEY,
-      AreaName   NVARCHAR(200) NOT NULL,
-      Avatar     NVARCHAR(MAX) DEFAULT '',
-      [Desc]     NVARCHAR(MAX) DEFAULT '',
-      Visible    INT           DEFAULT 1,
-      CreateDate NVARCHAR(20)  DEFAULT '',
-      CreateBy   NVARCHAR(100) DEFAULT 'admin'
+    CREATE TABLE IF NOT EXISTS Area (
+      "AreaID"     SERIAL PRIMARY KEY,
+      "AreaName"   VARCHAR(200) NOT NULL,
+      "Avatar"     TEXT DEFAULT '',
+      "Desc"       TEXT DEFAULT '',
+      "Visible"    INTEGER DEFAULT 1,
+      "CreateDate" VARCHAR(20) DEFAULT '',
+      "CreateBy"   VARCHAR(100) DEFAULT 'admin'
     )
   `);
   console.log('  ✅ Area');
 
   await run(`
-    IF OBJECT_ID('Room','U') IS NULL
-    CREATE TABLE Room (
-      RoomID       INT           IDENTITY(1,1) NOT NULL PRIMARY KEY,
-      RoomName     NVARCHAR(200) NOT NULL,
-      AreaID       INT           REFERENCES Area(AreaID),
-      Seat         INT           DEFAULT 10,
-      PhoneCall    INT           DEFAULT 0,
-      VideoCall    INT           DEFAULT 0,
-      IsVIP        INT           DEFAULT 0,
-      VIPCondition INT           DEFAULT 0,
-      VIPMinutes   INT           DEFAULT 60,
-      Visible      INT           DEFAULT 1,
-      [Desc]       NVARCHAR(MAX) DEFAULT '',
-      Avatar       NVARCHAR(MAX) DEFAULT '',
-      CreateDate   NVARCHAR(20)  DEFAULT '',
-      CreateBy     NVARCHAR(100) DEFAULT 'admin'
+    CREATE TABLE IF NOT EXISTS Room (
+      "RoomID"       SERIAL PRIMARY KEY,
+      "RoomName"     VARCHAR(200) NOT NULL,
+      "AreaID"       INTEGER REFERENCES Area("AreaID"),
+      "Seat"         INTEGER DEFAULT 10,
+      "PhoneCall"    INTEGER DEFAULT 0,
+      "VideoCall"    INTEGER DEFAULT 0,
+      "IsVIP"        INTEGER DEFAULT 0,
+      "VIPCondition" INTEGER DEFAULT 0,
+      "VIPMinutes"   INTEGER DEFAULT 60,
+      "Visible"      INTEGER DEFAULT 1,
+      "Desc"         TEXT DEFAULT '',
+      "Avatar"       TEXT DEFAULT '',
+      "CreateDate"   VARCHAR(20) DEFAULT '',
+      "CreateBy"     VARCHAR(100) DEFAULT 'admin'
     )
   `);
   console.log('  ✅ Room');
 
   await run(`
-    IF OBJECT_ID('Equipment','U') IS NULL
-    CREATE TABLE Equipment (
-      EquipmentID INT           IDENTITY(1,1) NOT NULL PRIMARY KEY,
-      RoomID      INT           NOT NULL REFERENCES Room(RoomID),
-      Name        NVARCHAR(200) NOT NULL,
-      Icon        NVARCHAR(100) DEFAULT 'fa-cube',
-      Quantity    INT           DEFAULT 1,
-      Note        NVARCHAR(MAX) DEFAULT '',
-      Visible     INT           DEFAULT 1
+    CREATE TABLE IF NOT EXISTS Equipment (
+      "EquipmentID" SERIAL PRIMARY KEY,
+      "RoomID"      INTEGER NOT NULL REFERENCES Room("RoomID"),
+      "Name"        VARCHAR(200) NOT NULL,
+      "Icon"        VARCHAR(100) DEFAULT 'fa-cube',
+      "Quantity"    INTEGER DEFAULT 1,
+      "Note"        TEXT DEFAULT '',
+      "Visible"     INTEGER DEFAULT 1
     )
   `);
   console.log('  ✅ Equipment');
 
   await run(`
-    IF OBJECT_ID('Booking','U') IS NULL
-    CREATE TABLE Booking (
-      BookingID  INT           IDENTITY(1,1) NOT NULL PRIMARY KEY,
-      UserID     NVARCHAR(100) REFERENCES [User](UserID),
-      CreateDate NVARCHAR(20)  DEFAULT ''
+    CREATE TABLE IF NOT EXISTS Booking (
+      "BookingID"  SERIAL PRIMARY KEY,
+      "UserID"     VARCHAR(100) REFERENCES "User"("UserID"),
+      "CreateDate" VARCHAR(20) DEFAULT ''
     )
   `);
   console.log('  ✅ Booking');
 
   await run(`
-    IF OBJECT_ID('LineRoom','U') IS NULL
-    CREATE TABLE LineRoom (
-      LineRoomID       INT           IDENTITY(1,1) NOT NULL PRIMARY KEY,
-      BookingID        INT           REFERENCES Booking(BookingID),
-      UserID           NVARCHAR(100) REFERENCES [User](UserID),
-      FacultyID        INT           REFERENCES Faculty(FacultyID),
-      RoomID           INT           REFERENCES Room(RoomID),
-      TimeStart        NVARCHAR(20)  NOT NULL,
-      TimeEnd          NVARCHAR(20)  NOT NULL,
-      Title            NVARCHAR(500) DEFAULT '',
-      Content          NVARCHAR(MAX) DEFAULT '',
-      Note             NVARCHAR(MAX) DEFAULT '',
-      NumberPerson     INT           DEFAULT 1,
-      Status           INT           DEFAULT 1,
-      ApprovedBy       NVARCHAR(100) DEFAULT NULL,
-      ApprovedAt       NVARCHAR(20)  DEFAULT NULL,
-      RejectReason     NVARCHAR(MAX) DEFAULT NULL,
-      ServiceRequest   NVARCHAR(MAX) DEFAULT NULL,
-      RecurringGroupID INT           DEFAULT NULL,
-      RecurringType    NVARCHAR(20)  DEFAULT NULL,
-      RecurringEnd     NVARCHAR(20)  DEFAULT NULL,
-      ReminderSent     INT           DEFAULT 0,
-      CreateDate       NVARCHAR(20)  DEFAULT ''
+    CREATE TABLE IF NOT EXISTS LineRoom (
+      "LineRoomID"       SERIAL PRIMARY KEY,
+      "BookingID"        INTEGER REFERENCES Booking("BookingID"),
+      "UserID"           VARCHAR(100) REFERENCES "User"("UserID"),
+      "FacultyID"        INTEGER REFERENCES Faculty("FacultyID"),
+      "RoomID"           INTEGER REFERENCES Room("RoomID"),
+      "TimeStart"        VARCHAR(20) NOT NULL,
+      "TimeEnd"          VARCHAR(20) NOT NULL,
+      "Title"            VARCHAR(500) DEFAULT '',
+      "Content"          TEXT DEFAULT '',
+      "Note"             TEXT DEFAULT '',
+      "NumberPerson"     INTEGER DEFAULT 1,
+      "Status"           INTEGER DEFAULT 1,
+      "ApprovedBy"       VARCHAR(100) DEFAULT NULL,
+      "ApprovedAt"       VARCHAR(20) DEFAULT NULL,
+      "RejectReason"     TEXT DEFAULT NULL,
+      "ServiceRequest"   TEXT DEFAULT NULL,
+      "RecurringGroupID" INTEGER DEFAULT NULL,
+      "RecurringType"    VARCHAR(20) DEFAULT NULL,
+      "RecurringEnd"     VARCHAR(20) DEFAULT NULL,
+      "ReminderSent"     INTEGER DEFAULT 0,
+      "CancelledAt"      TIMESTAMP DEFAULT NULL,
+      "CreateDate"       VARCHAR(20) DEFAULT ''
     )
   `);
   console.log('  ✅ LineRoom');
 
   await run(`
-    IF OBJECT_ID('BookingAttendee','U') IS NULL
-    CREATE TABLE BookingAttendee (
-      AttendeeID INT           IDENTITY(1,1) NOT NULL PRIMARY KEY,
-      LineRoomID INT           NOT NULL REFERENCES LineRoom(LineRoomID),
-      UserID     NVARCHAR(100) NOT NULL REFERENCES [User](UserID),
-      Status     INT           DEFAULT 0,
-      InvitedAt  NVARCHAR(20)  DEFAULT '',
-      CONSTRAINT UC_BookingAttendee UNIQUE (LineRoomID, UserID)
+    CREATE TABLE IF NOT EXISTS BookingAttendee (
+      "AttendeeID" SERIAL PRIMARY KEY,
+      "LineRoomID" INTEGER NOT NULL REFERENCES LineRoom("LineRoomID"),
+      "UserID"     VARCHAR(100) NOT NULL REFERENCES "User"("UserID"),
+      "Status"     INTEGER DEFAULT 0,
+      "InvitedAt"  VARCHAR(20) DEFAULT '',
+      CONSTRAINT uc_booking_attendee UNIQUE ("LineRoomID", "UserID")
     )
   `);
   console.log('  ✅ BookingAttendee');
 
   await run(`
-    IF OBJECT_ID('BookingAttachment','U') IS NULL
-    CREATE TABLE BookingAttachment (
-      AttachmentID INT           IDENTITY(1,1) NOT NULL PRIMARY KEY,
-      LineRoomID   INT           NOT NULL REFERENCES LineRoom(LineRoomID),
-      FileName     NVARCHAR(500) NOT NULL,
-      FilePath     NVARCHAR(MAX) NOT NULL,
-      FileSize     INT           DEFAULT 0,
-      MimeType     NVARCHAR(200) DEFAULT '',
-      UploadedAt   NVARCHAR(20)  DEFAULT '',
-      UploadedBy   NVARCHAR(100) DEFAULT ''
+    CREATE TABLE IF NOT EXISTS BookingAttachment (
+      "AttachmentID" SERIAL PRIMARY KEY,
+      "LineRoomID"   INTEGER NOT NULL REFERENCES LineRoom("LineRoomID"),
+      "FileName"     VARCHAR(500) NOT NULL,
+      "FilePath"     TEXT NOT NULL,
+      "FileSize"     INTEGER DEFAULT 0,
+      "MimeType"     VARCHAR(200) DEFAULT '',
+      "UploadedAt"   VARCHAR(20) DEFAULT '',
+      "UploadedBy"   VARCHAR(100) DEFAULT ''
     )
   `);
   console.log('  ✅ BookingAttachment');
 
   await run(`
-    IF OBJECT_ID('Role','U') IS NULL
-    CREATE TABLE Role (
-      RoleID      INT           IDENTITY(1,1) NOT NULL PRIMARY KEY,
-      Name        NVARCHAR(200) NOT NULL CONSTRAINT UC_Role_Name UNIQUE,
-      Description NVARCHAR(MAX) DEFAULT '',
-      CreatedAt   NVARCHAR(20)  DEFAULT ''
+    CREATE TABLE IF NOT EXISTS "Role" (
+      "RoleID"      SERIAL PRIMARY KEY,
+      "Name"        VARCHAR(200) NOT NULL UNIQUE,
+      "Description" TEXT DEFAULT '',
+      "CreatedAt"   VARCHAR(20) DEFAULT ''
     )
   `);
   console.log('  ✅ Role');
 
   await run(`
-    IF OBJECT_ID('UserRole','U') IS NULL
-    CREATE TABLE UserRole (
-      UserRoleID INT           IDENTITY(1,1) NOT NULL PRIMARY KEY,
-      UserID     NVARCHAR(100) NOT NULL REFERENCES [User](UserID),
-      RoleID     INT           NOT NULL REFERENCES Role(RoleID),
-      AssignedAt NVARCHAR(20)  DEFAULT '',
-      CONSTRAINT UC_UserRole UNIQUE (UserID, RoleID)
+    CREATE TABLE IF NOT EXISTS "UserRole" (
+      "UserRoleID" SERIAL PRIMARY KEY,
+      "UserID"     VARCHAR(100) NOT NULL REFERENCES "User"("UserID"),
+      "RoleID"     INTEGER NOT NULL REFERENCES "Role"("RoleID"),
+      "AssignedAt" VARCHAR(20) DEFAULT '',
+      CONSTRAINT uc_user_role UNIQUE ("UserID", "RoleID")
     )
   `);
   console.log('  ✅ UserRole');
 
   await run(`
-    IF OBJECT_ID('Setting','U') IS NULL
-    CREATE TABLE Setting (
-      [Key]   NVARCHAR(100) NOT NULL PRIMARY KEY,
-      [Value] NVARCHAR(MAX) NOT NULL DEFAULT ''
+    CREATE TABLE IF NOT EXISTS Setting (
+      key   VARCHAR(100) NOT NULL PRIMARY KEY,
+      value TEXT NOT NULL DEFAULT ''
     )
   `);
   console.log('  ✅ Setting');
 
   await run(`
-    IF OBJECT_ID('AI_Chat_Log','U') IS NULL
-    CREATE TABLE AI_Chat_Log (
-      LogID       INT           IDENTITY(1,1) NOT NULL PRIMARY KEY,
-      UserID      NVARCHAR(100) DEFAULT NULL,
-      UserMessage NVARCHAR(MAX) NOT NULL,
-      BotReply    NVARCHAR(MAX) DEFAULT NULL,
-      AI_JSON     NVARCHAR(MAX) DEFAULT NULL,
-      CreateDate  NVARCHAR(20)  DEFAULT ''
+    CREATE TABLE IF NOT EXISTS AI_Chat_Log (
+      "LogID"       SERIAL PRIMARY KEY,
+      "UserID"      VARCHAR(100) DEFAULT NULL,
+      "UserMessage" TEXT NOT NULL,
+      "BotReply"    TEXT DEFAULT NULL,
+      "AI_JSON"     TEXT DEFAULT NULL,
+      "CreateDate"  VARCHAR(20) DEFAULT ''
     )
   `);
   console.log('  ✅ AI_Chat_Log');
 
-  // Kiểm tra đã seed chưa
-  const userCount = await run('SELECT COUNT(*) AS c FROM [User]');
-  if (userCount.recordset[0].c > 0) {
+  await run(`
+    CREATE TABLE IF NOT EXISTS LoginLog (
+      "LogID"     SERIAL PRIMARY KEY,
+      "Username"  VARCHAR(100) NOT NULL,
+      "IP"        VARCHAR(50) DEFAULT '',
+      "Status"    VARCHAR(20) NOT NULL,
+      "Reason"    VARCHAR(200) DEFAULT '',
+      "CreatedAt" VARCHAR(30) DEFAULT ''
+    )
+  `);
+  console.log('  ✅ LoginLog');
+
+  // ─── Kiểm tra đã seed chưa ────────────────────────────────────────────────
+  const userCount = await pool.query('SELECT COUNT(*) AS c FROM "User"');
+  if (parseInt(userCount.rows[0].c) > 0) {
     console.log('\n✅ Database already seeded, skipping...');
-    await _pool.close();
+    await pool.end();
     process.exit(0);
   }
 
-  // ══════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════
   // SEED DATA
-  // ══════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════
   console.log('\n🌱 Seeding data...');
 
   // ─── Faculties ─────────────────────────────────────────────────────────────
-  const f1  = await ins(`INSERT INTO Faculty (FacultyName,Visible) VALUES (@n,1)`, { n: 'Khoa Công nghệ Thông tin' });
-  const f2  = await ins(`INSERT INTO Faculty (FacultyName,Visible) VALUES (@n,1)`, { n: 'Khoa Kinh tế' });
-  const f3  = await ins(`INSERT INTO Faculty (FacultyName,Visible) VALUES (@n,1)`, { n: 'Phòng Đào tạo' });
-  const f4  = await ins(`INSERT INTO Faculty (FacultyName,Visible) VALUES (@n,1)`, { n: 'Ban Giám hiệu' });
-  const f5  = await ins(`INSERT INTO Faculty (FacultyName,Visible) VALUES (@n,1)`, { n: 'Khoa Cơ khí - Xây dựng' });
-  const f6  = await ins(`INSERT INTO Faculty (FacultyName,Visible) VALUES (@n,1)`, { n: 'Khoa Điện - Điện tử' });
-  const f7  = await ins(`INSERT INTO Faculty (FacultyName,Visible) VALUES (@n,1)`, { n: 'Khoa Hóa học - Thực phẩm' });
-  const f8  = await ins(`INSERT INTO Faculty (FacultyName,Visible) VALUES (@n,1)`, { n: 'Khoa Quản trị Kinh doanh' });
-  const f9  = await ins(`INSERT INTO Faculty (FacultyName,Visible) VALUES (@n,1)`, { n: 'Khoa Ngoại ngữ' });
-  const f10 = await ins(`INSERT INTO Faculty (FacultyName,Visible) VALUES (@n,1)`, { n: 'Phòng Hành chính - Nhân sự' });
-  const f11 = await ins(`INSERT INTO Faculty (FacultyName,Visible) VALUES (@n,1)`, { n: 'Phòng Tài chính - Kế toán' });
-  const f12 = await ins(`INSERT INTO Faculty (FacultyName,Visible) VALUES (@n,1)`, { n: 'Trung tâm Nghiên cứu & Phát triển' });
+  const f1  = await ins(`INSERT INTO Faculty ("FacultyName","Visible") VALUES ($1,1)`, ['Khoa Công nghệ Thông tin']);
+  const f2  = await ins(`INSERT INTO Faculty ("FacultyName","Visible") VALUES ($1,1)`, ['Khoa Kinh tế']);
+  const f3  = await ins(`INSERT INTO Faculty ("FacultyName","Visible") VALUES ($1,1)`, ['Phòng Đào tạo']);
+  const f4  = await ins(`INSERT INTO Faculty ("FacultyName","Visible") VALUES ($1,1)`, ['Ban Giám hiệu']);
+  const f5  = await ins(`INSERT INTO Faculty ("FacultyName","Visible") VALUES ($1,1)`, ['Khoa Cơ khí - Xây dựng']);
+  const f6  = await ins(`INSERT INTO Faculty ("FacultyName","Visible") VALUES ($1,1)`, ['Khoa Điện - Điện tử']);
+  const f7  = await ins(`INSERT INTO Faculty ("FacultyName","Visible") VALUES ($1,1)`, ['Khoa Hóa học - Thực phẩm']);
+  const f8  = await ins(`INSERT INTO Faculty ("FacultyName","Visible") VALUES ($1,1)`, ['Khoa Quản trị Kinh doanh']);
+  const f9  = await ins(`INSERT INTO Faculty ("FacultyName","Visible") VALUES ($1,1)`, ['Khoa Ngoại ngữ']);
+  const f10 = await ins(`INSERT INTO Faculty ("FacultyName","Visible") VALUES ($1,1)`, ['Phòng Hành chính - Nhân sự']);
+  const f11 = await ins(`INSERT INTO Faculty ("FacultyName","Visible") VALUES ($1,1)`, ['Phòng Tài chính - Kế toán']);
+  const f12 = await ins(`INSERT INTO Faculty ("FacultyName","Visible") VALUES ($1,1)`, ['Trung tâm Nghiên cứu & Phát triển']);
   console.log('  ✅ Faculties seeded');
 
   // ─── Users ─────────────────────────────────────────────────────────────────
   const h = (p) => bcrypt.hashSync(p, 10);
   const insertUser = async (id, name, pass, roles, facID, email) => {
-    await run(
-      `INSERT INTO [User] (UserID,FullName,Password,Roles,Visible,FacultyID,Email,Mobi)
-       VALUES (@id,@name,@pass,@roles,1,@fac,@email,'')`,
-      { id, name, pass: h(pass), roles, fac: facID, email }
+    await pool.query(
+      `INSERT INTO "User" ("UserID","FullName","Password","Roles","Visible","FacultyID","Email","Mobi")
+       VALUES ($1,$2,$3,$4,1,$5,$6,'')
+       ON CONFLICT ("UserID") DO NOTHING`,
+      [id, name, h(pass), roles, facID, email]
     );
   };
   await insertUser('admin',       'Quản trị viên',       'admin123', 1, f4,  'admin@university.edu.vn');
@@ -318,9 +292,9 @@ async function main() {
   console.log('  ✅ Users seeded');
 
   // ─── Areas ─────────────────────────────────────────────────────────────────
-  const a1 = await ins(`INSERT INTO Area (AreaName,Visible) VALUES (@n,1)`, { n: 'Khu A - Tòa nhà chính' });
-  const a2 = await ins(`INSERT INTO Area (AreaName,Visible) VALUES (@n,1)`, { n: 'Khu B - Thư viện' });
-  const a3 = await ins(`INSERT INTO Area (AreaName,Visible) VALUES (@n,1)`, { n: 'Khu C - Phòng thí nghiệm' });
+  const a1 = await ins(`INSERT INTO Area ("AreaName","Visible") VALUES ($1,1)`, ['Khu A - Tòa nhà chính']);
+  const a2 = await ins(`INSERT INTO Area ("AreaName","Visible") VALUES ($1,1)`, ['Khu B - Thư viện']);
+  const a3 = await ins(`INSERT INTO Area ("AreaName","Visible") VALUES ($1,1)`, ['Khu C - Phòng thí nghiệm']);
   console.log('  ✅ Areas seeded');
 
   // ─── Rooms ─────────────────────────────────────────────────────────────────
@@ -336,9 +310,9 @@ async function main() {
   ];
   const insertRoom = (name, areaID, seat, phone, video, vip, vipCond, vipMin, desc, img) =>
     ins(
-      `INSERT INTO Room (RoomName,AreaID,Seat,PhoneCall,VideoCall,IsVIP,VIPCondition,VIPMinutes,Visible,[Desc],Avatar)
-       VALUES (@name,@areaID,@seat,@phone,@video,@vip,@vipCond,@vipMin,1,@desc,@img)`,
-      { name, areaID, seat, phone, video, vip, vipCond, vipMin, desc, img }
+      `INSERT INTO Room ("RoomName","AreaID","Seat","PhoneCall","VideoCall","IsVIP","VIPCondition","VIPMinutes","Visible","Desc","Avatar")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,1,$9,$10)`,
+      [name, areaID, seat, phone, video, vip, vipCond, vipMin, desc, img]
     );
 
   const r1 = await insertRoom('Phòng họp A101',          a1, 20, 1, 1, 1, 0, 60, 'Phòng họp lớn tầng 1 khu A, đầy đủ thiết bị hội nghị',   IMG[0]);
@@ -353,9 +327,10 @@ async function main() {
 
   // ─── Equipment ─────────────────────────────────────────────────────────────
   const insEquip = (roomID, name, icon, qty) =>
-    run(`INSERT INTO Equipment (RoomID,Name,Icon,Quantity) VALUES (@r,@n,@i,@q)`,
-        { r: roomID, n: name, i: icon, q: qty });
-
+    pool.query(
+      `INSERT INTO Equipment ("RoomID","Name","Icon","Quantity") VALUES ($1,$2,$3,$4)`,
+      [roomID, name, icon, qty]
+    );
   for (const rID of [r1, r2, r3, r4, r5, r6, r7, r8]) {
     await insEquip(rID, 'Máy chiếu',  'fa-desktop',    1);
     await insEquip(rID, 'Bảng trắng', 'fa-chalkboard', 1);
@@ -374,13 +349,18 @@ async function main() {
   console.log('  ✅ Equipment seeded');
 
   // ─── Roles ─────────────────────────────────────────────────────────────────
-  const role1 = await ins(`INSERT INTO Role (Name,Description) VALUES (@n,@d)`,
-    { n: 'Quản trị ứng dụng',       d: 'Toàn quyền thực hiện các chức năng trong ứng dụng' });
-  await ins(`INSERT INTO Role (Name,Description) VALUES (@n,@d)`,
-    { n: 'Người quản lý đặt phòng', d: 'Có quyền sửa, xóa, phê duyệt đặt phòng của người khác' });
-  await ins(`INSERT INTO Role (Name,Description) VALUES (@n,@d)`,
-    { n: 'Người đặt phòng',         d: 'Có quyền cập nhật đặt phòng của chính mình' });
-  await run(`INSERT INTO UserRole (UserID,RoleID) VALUES (@uid,@rid)`, { uid: 'admin', rid: role1 });
+  const role1 = await ins(
+    `INSERT INTO "Role" ("Name","Description") VALUES ($1,$2)`,
+    ['Quản trị ứng dụng', 'Toàn quyền thực hiện các chức năng trong ứng dụng']
+  );
+  await ins(`INSERT INTO "Role" ("Name","Description") VALUES ($1,$2)`,
+    ['Người quản lý đặt phòng', 'Có quyền sửa, xóa, phê duyệt đặt phòng của người khác']);
+  await ins(`INSERT INTO "Role" ("Name","Description") VALUES ($1,$2)`,
+    ['Người đặt phòng', 'Có quyền cập nhật đặt phòng của chính mình']);
+  await pool.query(
+    `INSERT INTO "UserRole" ("UserID","RoleID") VALUES ($1,$2) ON CONFLICT DO NOTHING`,
+    ['admin', role1]
+  );
   console.log('  ✅ Roles seeded');
 
   // ─── Settings ──────────────────────────────────────────────────────────────
@@ -390,10 +370,9 @@ async function main() {
     ['workdayStart', '07:00'], ['workdayEnd', '21:00'],
   ];
   for (const [k, v] of settings) {
-    await run(
-      `IF NOT EXISTS (SELECT 1 FROM Setting WHERE [Key]=@k)
-       INSERT INTO Setting ([Key],[Value]) VALUES (@k,@v)`,
-      { k, v }
+    await pool.query(
+      `INSERT INTO Setting (key, value) VALUES ($1, $2) ON CONFLICT (key) DO NOTHING`,
+      [k, v]
     );
   }
   console.log('  ✅ Settings seeded');
@@ -407,31 +386,31 @@ async function main() {
   };
   const D = (h, m = 0) => new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m);
 
-  const b1 = await ins(`INSERT INTO Booking (UserID) VALUES (@uid)`, { uid: 'user01' });
-  await run(
-    `INSERT INTO LineRoom (BookingID,UserID,FacultyID,RoomID,TimeStart,TimeEnd,Title,NumberPerson,Status)
-     VALUES (@bid,@uid,@fid,@rid,@ts,@te,@title,@np,@st)`,
-    { bid: b1, uid: 'user01', fid: f1, rid: r2, ts: fmt(D(9)), te: fmt(D(11)), title: 'Họp nhóm nghiên cứu', np: 8, st: 1 }
+  const b1 = await ins(`INSERT INTO Booking ("UserID") VALUES ($1)`, ['user01']);
+  await pool.query(
+    `INSERT INTO LineRoom ("BookingID","UserID","FacultyID","RoomID","TimeStart","TimeEnd","Title","NumberPerson","Status")
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    [b1, 'user01', f1, r2, fmt(D(9)), fmt(D(11)), 'Họp nhóm nghiên cứu', 8, 1]
   );
 
-  const b2 = await ins(`INSERT INTO Booking (UserID) VALUES (@uid)`, { uid: 'admin' });
-  await run(
-    `INSERT INTO LineRoom (BookingID,UserID,FacultyID,RoomID,TimeStart,TimeEnd,Title,NumberPerson,Status)
-     VALUES (@bid,@uid,@fid,@rid,@ts,@te,@title,@np,@st)`,
-    { bid: b2, uid: 'admin', fid: f4, rid: r3, ts: fmt(D(14)), te: fmt(D(16)), title: 'Họp Ban Giám hiệu', np: 15, st: 1 }
+  const b2 = await ins(`INSERT INTO Booking ("UserID") VALUES ($1)`, ['admin']);
+  await pool.query(
+    `INSERT INTO LineRoom ("BookingID","UserID","FacultyID","RoomID","TimeStart","TimeEnd","Title","NumberPerson","Status")
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    [b2, 'admin', f4, r3, fmt(D(14)), fmt(D(16)), 'Họp Ban Giám hiệu', 15, 1]
   );
 
-  const b3 = await ins(`INSERT INTO Booking (UserID) VALUES (@uid)`, { uid: 'user02' });
-  await run(
-    `INSERT INTO LineRoom (BookingID,UserID,FacultyID,RoomID,TimeStart,TimeEnd,Title,NumberPerson,Status)
-     VALUES (@bid,@uid,@fid,@rid,@ts,@te,@title,@np,@st)`,
-    { bid: b3, uid: 'user02', fid: f2, rid: r1, ts: fmt(D(10)), te: fmt(D(12)), title: 'Báo cáo tiến độ dự án', np: 5, st: 0 }
+  const b3 = await ins(`INSERT INTO Booking ("UserID") VALUES ($1)`, ['user02']);
+  await pool.query(
+    `INSERT INTO LineRoom ("BookingID","UserID","FacultyID","RoomID","TimeStart","TimeEnd","Title","NumberPerson","Status")
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    [b3, 'user02', f2, r1, fmt(D(10)), fmt(D(12)), 'Báo cáo tiến độ dự án', 5, 0]
   );
   console.log('  ✅ Sample bookings seeded');
 
-  await _pool.close();
+  await pool.end();
   console.log('\n🎉 Database initialized successfully!');
-  console.log('   Login: admin/admin123 | user01-user20/123456 | ngocphan|ngocpro457|ngoctran457/123456');
+  console.log('   Login: admin/admin123 | user01-user20/123456');
 }
 
 main().catch(err => {

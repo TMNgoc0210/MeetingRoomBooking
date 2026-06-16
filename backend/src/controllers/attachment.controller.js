@@ -75,22 +75,22 @@ const addAttachment = async (req, res) => {
     ;(async () => {
       try {
         const info = await queryOne(
-          `SELECT lr.Title, lr.TimeStart, lr.TimeEnd, lr.UserID,
-                  u.FullName AS OrganizerName, r.RoomName, a.AreaName
+          `SELECT lr."Title", lr."TimeStart", lr."TimeEnd", lr."UserID",
+                  u."FullName" AS OrganizerName, r."RoomName", a."AreaName"
            FROM LineRoom lr
-           JOIN [User] u ON lr.UserID = u.UserID
-           JOIN Room r ON lr.RoomID = r.RoomID
-           LEFT JOIN Area a ON r.AreaID = a.AreaID
-           WHERE lr.LineRoomID = @lineRoomID`,
+           JOIN "User" u ON lr."UserID" = u."UserID"
+           JOIN Room r ON lr."RoomID" = r."RoomID"
+           LEFT JOIN Area a ON r."AreaID" = a."AreaID"
+           WHERE lr."LineRoomID" = @lineRoomID`,
           { lineRoomID }
         );
         if (!info) return;
 
         // Lấy danh sách attendees
         const attendees = await query(
-          `SELECT u.Email, u.FullName FROM BookingAttendee ba
-           JOIN [User] u ON ba.UserID = u.UserID
-           WHERE ba.LineRoomID = @lineRoomID AND u.Email IS NOT NULL AND u.Email != ''`,
+          `SELECT u."Email", u."FullName" FROM BookingAttendee ba
+           JOIN "User" u ON ba."UserID" = u."UserID"
+           WHERE ba."LineRoomID" = @lineRoomID AND u."Email" IS NOT NULL AND u."Email" != ''`,
           { lineRoomID }
         );
 
@@ -98,7 +98,7 @@ const addAttachment = async (req, res) => {
         const recipients = [...attendees];
         if (req.user.userID !== info.UserID) {
           const organizer = await queryOne(
-            `SELECT Email, FullName FROM [User] WHERE UserID = @uid`,
+            `SELECT "Email", "FullName" FROM "User" WHERE "UserID" = @uid`,
             { uid: info.UserID }
           );
           if (organizer?.Email) recipients.push(organizer);

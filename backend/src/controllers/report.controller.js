@@ -28,14 +28,13 @@ const getDataChart = async (req, res) => {
       weekStart.setDate(weekStart.getDate() + 7);
     }
 
-    // Dùng LIKE prefix vì TimeStart lưu dạng NVARCHAR 'YYYY-MM-DD HH:MM:SS'
     const monthStr = String(month).padStart(2, '0');
     const prefix = `${year}-${monthStr}`;
-    let sql = `SELECT TimeStart FROM LineRoom WHERE TimeStart LIKE @prefix AND Status IN (0, 1)`;
+    let sql = `SELECT "TimeStart" FROM LineRoom WHERE "TimeStart" LIKE @prefix AND "Status" IN (0, 1)`;
     const params = { prefix: `${prefix}%` };
 
     if (roomID > 0) {
-      sql += ` AND RoomID = @roomID`;
+      sql += ` AND "RoomID" = @roomID`;
       params.roomID = roomID;
     }
 
@@ -63,13 +62,12 @@ const getDataChart = async (req, res) => {
  */
 const getSummary = async (req, res) => {
   try {
-    // SQLite: dùng date('now','localtime') thay vì GETDATE()
-    const [totalRooms] = await query(`SELECT COUNT(*) AS total FROM Room WHERE Visible = 1`);
-    const [totalUsers] = await query(`SELECT COUNT(*) AS total FROM [User] WHERE Visible = 1`);
+    const [totalRooms] = await query(`SELECT COUNT(*) AS total FROM Room WHERE "Visible" = 1`);
+    const [totalUsers] = await query(`SELECT COUNT(*) AS total FROM "User" WHERE "Visible" = 1`);
     const [totalBookings] = await query(`SELECT COUNT(*) AS total FROM LineRoom`);
     const [todayBookings] = await query(
       `SELECT COUNT(*) AS total FROM LineRoom
-       WHERE LEFT(TimeStart,10) = CONVERT(NVARCHAR(10),GETDATE(),120)`
+       WHERE LEFT("TimeStart",10) = TO_CHAR(NOW(), 'YYYY-MM-DD')`
     );
 
     return success(res, {
@@ -97,14 +95,16 @@ const getRoomUsage = async (req, res) => {
     const prefix = `${year}-${monthStr}%`;
 
     const rows = await query(
-      `SELECT r.RoomName, COUNT(lr.LineRoomID) AS bookingCount,
-              ISNULL(SUM(DATEDIFF(MINUTE, TRY_CAST(lr.TimeStart AS DATETIME2), TRY_CAST(lr.TimeEnd AS DATETIME2)) / 60.0), 0) AS totalHours
+      `SELECT r."RoomName", COUNT(lr."LineRoomID") AS bookingCount,
+              COALESCE(SUM(
+                EXTRACT(EPOCH FROM (lr."TimeEnd"::TIMESTAMP - lr."TimeStart"::TIMESTAMP)) / 3600.0
+              ), 0) AS totalHours
        FROM Room r
-       LEFT JOIN LineRoom lr ON r.RoomID = lr.RoomID
-         AND lr.TimeStart LIKE @prefix
-         AND lr.Status = 1
-       WHERE r.Visible = 1
-       GROUP BY r.RoomID, r.RoomName
+       LEFT JOIN LineRoom lr ON r."RoomID" = lr."RoomID"
+         AND lr."TimeStart" LIKE @prefix
+         AND lr."Status" = 1
+       WHERE r."Visible" = 1
+       GROUP BY r."RoomID", r."RoomName"
        ORDER BY bookingCount DESC`,
       { prefix }
     );
