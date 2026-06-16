@@ -144,9 +144,12 @@ const bookRoom = async (req, res) => {
        WHERE u."UserID" = @userID AND r."RoomID" = @roomID`,
       { userID, roomID: parseInt(roomID) }
     ).then(info => {
-      if (!info?.Email) return;
-      sendBookingConfirmEmail({ to: info.Email, name: info.FullName, title, roomName: info.RoomName, areaName: info.AreaName, timeStart: slots[0].start, timeEnd: slots[0].end, status: initialStatus, totalSlots: slots.length }).catch(e => console.error('[BookingMail]', e.message));
-    }).catch(() => {});
+      console.log('[BookingMail] info:', JSON.stringify({ email: info?.Email, name: info?.FullName, room: info?.RoomName }));
+      if (!info?.Email) { console.log('[BookingMail] skip: no email'); return; }
+      sendBookingConfirmEmail({ to: info.Email, name: info.FullName, title, roomName: info.RoomName, areaName: info.AreaName, timeStart: slots[0].start, timeEnd: slots[0].end, status: initialStatus, totalSlots: slots.length })
+        .then(() => console.log('[BookingMail] sent to', info.Email))
+        .catch(e => console.error('[BookingMail] FAILED:', e.message, e.code));
+    }).catch(e => console.error('[BookingMail] query error:', e.message));
 
     return success(res, { lineRoomIDs: insertedIDs, status: initialStatus, needsApproval: needApproval }, msg, 201);
   } catch (err) {
