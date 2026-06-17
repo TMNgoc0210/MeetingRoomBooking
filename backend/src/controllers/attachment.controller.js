@@ -20,13 +20,13 @@ const getAttachments = async (req, res) => {
 
     if (!isAdmin) {
       const booking = await queryOne(
-        `SELECT UserID FROM LineRoom WHERE LineRoomID = @lineRoomID`,
+        `SELECT "UserID" FROM LineRoom WHERE "LineRoomID" = @lineRoomID`,
         { lineRoomID }
       );
       const isOwner = booking?.UserID === requestorID;
       if (!isOwner) {
         const isAttendee = await queryOne(
-          `SELECT 1 AS ok FROM BookingAttendee WHERE LineRoomID = @lineRoomID AND UserID = @userID`,
+          `SELECT 1 AS ok FROM BookingAttendee WHERE "LineRoomID" = @lineRoomID AND "UserID" = @userID`,
           { lineRoomID, userID: requestorID }
         );
         if (!isAttendee) return success(res, []); // trả rỗng, không báo lỗi
@@ -34,8 +34,8 @@ const getAttachments = async (req, res) => {
     }
 
     const items = await query(
-      `SELECT AttachmentID, FileName, FilePath, FileSize, MimeType, UploadedAt, UploadedBy
-       FROM BookingAttachment WHERE LineRoomID = @lineRoomID ORDER BY UploadedAt DESC`,
+      `SELECT "AttachmentID", "FileName", "FilePath", "FileSize", "MimeType", "UploadedAt", "UploadedBy"
+       FROM BookingAttachment WHERE "LineRoomID" = @lineRoomID ORDER BY "UploadedAt" DESC`,
       { lineRoomID }
     );
     return success(res, items);
@@ -51,7 +51,7 @@ const addAttachment = async (req, res) => {
     if (!req.file) return badRequest(res, 'Không có file được tải lên');
 
     const booking = await queryOne(
-      `SELECT UserID FROM LineRoom WHERE LineRoomID = @lineRoomID`,
+      `SELECT "UserID" FROM LineRoom WHERE "LineRoomID" = @lineRoomID`,
       { lineRoomID }
     );
     if (!booking) return notFound(res, 'Không tìm thấy lịch đặt');
@@ -60,7 +60,7 @@ const addAttachment = async (req, res) => {
 
     const filePath = `/uploads/docs/${req.file.filename}`;
     const result = await execute(
-      `INSERT INTO BookingAttachment (LineRoomID, FileName, FilePath, FileSize, MimeType, UploadedBy)
+      `INSERT INTO BookingAttachment ("LineRoomID","FileName","FilePath","FileSize","MimeType","UploadedBy")
        VALUES (@lineRoomID, @fileName, @filePath, @fileSize, @mimeType, @uploadedBy)`,
       {
         lineRoomID,
@@ -76,7 +76,7 @@ const addAttachment = async (req, res) => {
       try {
         const info = await queryOne(
           `SELECT lr."Title", lr."TimeStart", lr."TimeEnd", lr."UserID",
-                  u."FullName" AS OrganizerName, r."RoomName", a."AreaName"
+                  u."FullName" AS "OrganizerName", r."RoomName", a."AreaName"
            FROM LineRoom lr
            JOIN "User" u ON lr."UserID" = u."UserID"
            JOIN Room r ON lr."RoomID" = r."RoomID"
@@ -138,9 +138,9 @@ const deleteAttachment = async (req, res) => {
   try {
     const attachmentID = parseInt(req.params.id);
     const item = await queryOne(
-      `SELECT a.FilePath, lr.UserID
-       FROM BookingAttachment a JOIN LineRoom lr ON a.LineRoomID = lr.LineRoomID
-       WHERE a.AttachmentID = @attachmentID`,
+      `SELECT a."FilePath", lr."UserID"
+       FROM BookingAttachment a JOIN LineRoom lr ON a."LineRoomID" = lr."LineRoomID"
+       WHERE a."AttachmentID" = @attachmentID`,
       { attachmentID }
     );
     if (!item) return notFound(res, 'Không tìm thấy file đính kèm');
@@ -151,7 +151,7 @@ const deleteAttachment = async (req, res) => {
     const physPath = path.join(__dirname, '../../', item.FilePath.replace(/^\//, ''));
     if (fs.existsSync(physPath)) fs.unlinkSync(physPath);
 
-    await execute(`DELETE FROM BookingAttachment WHERE AttachmentID = @attachmentID`, { attachmentID });
+    await execute(`DELETE FROM BookingAttachment WHERE "AttachmentID" = @attachmentID`, { attachmentID });
     return success(res, null, 'Đã xoá file đính kèm');
   } catch (err) {
     return error(res, 'Lỗi hệ thống', 500, err.message);
@@ -165,10 +165,10 @@ const downloadAttachment = async (req, res) => {
   try {
     const attachmentID = parseInt(req.params.id);
     const item = await queryOne(
-      `SELECT a.FileName, a.FilePath, a.MimeType, lr.UserID AS OwnerID, a.LineRoomID
+      `SELECT a."FileName", a."FilePath", a."MimeType", lr."UserID" AS "OwnerID", a."LineRoomID"
        FROM BookingAttachment a
-       JOIN LineRoom lr ON a.LineRoomID = lr.LineRoomID
-       WHERE a.AttachmentID = @attachmentID`,
+       JOIN LineRoom lr ON a."LineRoomID" = lr."LineRoomID"
+       WHERE a."AttachmentID" = @attachmentID`,
       { attachmentID }
     );
     if (!item) return notFound(res, 'Không tìm thấy file');
@@ -180,7 +180,7 @@ const downloadAttachment = async (req, res) => {
     if (!isAdmin && !isOwner) {
       const isAttendee = await queryOne(
         `SELECT 1 AS ok FROM BookingAttendee
-         WHERE LineRoomID = @lineRoomID AND UserID = @userID`,
+         WHERE "LineRoomID" = @lineRoomID AND "UserID" = @userID`,
         { lineRoomID: item.LineRoomID, userID: requestorID }
       );
       if (!isAttendee) return error(res, 'Bạn không có quyền truy cập tài liệu này', 403);
