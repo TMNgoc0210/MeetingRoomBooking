@@ -114,6 +114,7 @@ app.use('/api/equipment', require('./routes/equipment.routes'));
 app.use('/api/chat',      require('./routes/chat.routes'));
 app.use('/api/settings',  require('./routes/setting.routes'));
 app.use('/api/roles',     require('./routes/role.routes'));
+app.use('/api/notifications', require('./routes/notification.routes'));
 
 // ─── Health Check ─────────────────────────────────────────────
 app.get('/api/health', (req, res) => {

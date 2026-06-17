@@ -15,13 +15,15 @@ const pool = new Pool({
 });
 
 async function addColIfNotExists(table, column, definition) {
+  // Bảng được tạo KHÔNG quote nên Postgres fold tên về lowercase,
+  // nhưng cột được tạo CÓ quote nên giữ nguyên case (ví dụ "Status").
   const res = await pool.query(
     `SELECT COUNT(*) AS c FROM information_schema.columns
      WHERE table_name = $1 AND column_name = $2`,
-    [table.toLowerCase(), column.toLowerCase()]
+    [table.toLowerCase(), column]
   );
   if (parseInt(res.rows[0].c) === 0) {
-    await pool.query(`ALTER TABLE "${table}" ADD COLUMN IF NOT EXISTS "${column}" ${definition}`);
+    await pool.query(`ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS "${column}" ${definition}`);
     console.log(`  ✅ Added "${table}"."${column}"`);
   } else {
     console.log(`  ⏭️  "${table}"."${column}" already exists`);
@@ -139,6 +141,18 @@ async function main() {
       "BotReply"    TEXT DEFAULT NULL,
       "AI_JSON"     TEXT DEFAULT NULL,
       "CreateDate"  VARCHAR(20) DEFAULT ''
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS Notification (
+      "NotificationID" SERIAL PRIMARY KEY,
+      "UserID"     VARCHAR(100) NOT NULL REFERENCES "User"("UserID"),
+      "Type"       VARCHAR(50) NOT NULL,
+      "Message"    TEXT NOT NULL,
+      "LineRoomID" INTEGER DEFAULT NULL,
+      "IsRead"     INTEGER DEFAULT 0,
+      "CreateDate" VARCHAR(20) DEFAULT ''
     )
   `);
 

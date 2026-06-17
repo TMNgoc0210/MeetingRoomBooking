@@ -3,6 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import useAuthStore from '../store/authStore'
 import useUIStore from '../store/uiStore'
 import { authService } from '../services'
+import NotificationBell from './NotificationBell'
 import toast from 'react-hot-toast'
 
 const PendingBadge = () => {
@@ -108,36 +109,39 @@ const Navbar = () => {
         {/* Right side — desktop */}
         <div className="navbar-right">
           {user ? (
-            <div className="user-menu" ref={dropRef}>
-              <button className="user-btn" onClick={() => setDropdownOpen((v) => !v)}>
-                <img
-                  src={user.Avatar || '/uploads/images/nopic.png'}
-                  alt="avatar"
-                  className="user-avatar"
-                  onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/400x300/2e2a24/c9a96e?text=No+Image' }}
-                />
-                <span className="navbar-username">{user.FullName}</span>
-                <i className={`fa fa-chevron-${dropdownOpen ? 'up' : 'down'}`} style={{ fontSize: '0.7rem' }} />
-              </button>
-              {dropdownOpen && (
-                <div className="dropdown-menu">
-                  <button className="dropdown-item" onClick={() => { openUserModal(user.UserID); setDropdownOpen(false) }}>
-                    <i className="fa fa-user" style={{ width: 16 }} /> Cá nhân
-                  </button>
-                  <button className="dropdown-item" onClick={() => { openChangePassModal(); setDropdownOpen(false) }}>
-                    <i className="fa fa-key" style={{ width: 16 }} /> Đổi mật khẩu
-                  </button>
-                  <button className="dropdown-item" onClick={toggleTheme}>
-                    <i className={`fa ${theme === 'dark' ? 'fa-sun' : 'fa-moon'}`} style={{ width: 16 }} />
-                    {theme === 'dark' ? 'Giao diện sáng' : 'Giao diện tối'}
-                  </button>
-                  <div className="dropdown-divider" />
-                  <button className="dropdown-item danger" onClick={handleLogout}>
-                    <i className="fa fa-sign-out-alt" style={{ width: 16 }} /> Đăng xuất
-                  </button>
-                </div>
-              )}
-            </div>
+            <>
+              <div className="user-menu" ref={dropRef}>
+                <button className="user-btn" onClick={() => setDropdownOpen((v) => !v)}>
+                  <img
+                    src={user.Avatar || '/uploads/images/nopic.png'}
+                    alt="avatar"
+                    className="user-avatar"
+                    onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/400x300/2e2a24/c9a96e?text=No+Image' }}
+                  />
+                  <span className="navbar-username">{user.FullName}</span>
+                  <i className={`fa fa-chevron-${dropdownOpen ? 'up' : 'down'}`} style={{ fontSize: '0.7rem' }} />
+                </button>
+                {dropdownOpen && (
+                  <div className="dropdown-menu">
+                    <button className="dropdown-item" onClick={() => { openUserModal(user.UserID); setDropdownOpen(false) }}>
+                      <i className="fa fa-user" style={{ width: 16 }} /> Cá nhân
+                    </button>
+                    <button className="dropdown-item" onClick={() => { openChangePassModal(); setDropdownOpen(false) }}>
+                      <i className="fa fa-key" style={{ width: 16 }} /> Đổi mật khẩu
+                    </button>
+                    <button className="dropdown-item" onClick={toggleTheme}>
+                      <i className={`fa ${theme === 'dark' ? 'fa-sun' : 'fa-moon'}`} style={{ width: 16 }} />
+                      {theme === 'dark' ? 'Giao diện sáng' : 'Giao diện tối'}
+                    </button>
+                    <div className="dropdown-divider" />
+                    <button className="dropdown-item danger" onClick={handleLogout}>
+                      <i className="fa fa-sign-out-alt" style={{ width: 16 }} /> Đăng xuất
+                    </button>
+                  </div>
+                )}
+              </div>
+              <NotificationBell />
+            </>
           ) : (
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <button

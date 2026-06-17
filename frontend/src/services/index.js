@@ -19,6 +19,7 @@
  *   chatService      — gửi/nhận tin nhắn chatbot AI
  *   settingsService  — đọc/ghi thiết lập hệ thống
  *   roleService      — CRUD định nghĩa vai trò
+ *   notificationService — thông báo trong app (chuông)
  */
 import api from './api'
 
@@ -150,4 +151,11 @@ export const roleService = {
   add: (data) => api.post('/roles', data),
   update: (id, data) => api.put(`/roles/${id}`, data),
   delete: (id) => api.delete(`/roles/${id}`),
+}
+
+export const notificationService = {
+  getMy: (limit = 20) => api.get('/notifications', { params: { limit }, _silent: true }),
+  getUnreadCount: () => api.get('/notifications/unread-count', { _silent: true }),
+  markRead: (id) => api.put(`/notifications/${id}/read`),
+  markAllRead: () => api.put('/notifications/read-all'),
 }

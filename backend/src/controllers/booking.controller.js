@@ -1,6 +1,7 @@
 const { query, queryOne, execute } = require('../config/db');
 const { success, error, notFound, badRequest } = require('../utils/response');
 const { sendBookingConfirmEmail, sendAttendeeInviteEmail, sendBookingStatusEmail } = require('../utils/email');
+const { createNotification } = require('../utils/notification');
 
 const STATUS = { PENDING: 0, APPROVED: 1, REJECTED: 2, CANCELLED: 3 };
 const CANCEL_LIMIT = 5;
@@ -117,6 +118,16 @@ const bookRoom = async (req, res) => {
       ? `Đã gửi yêu cầu đặt phòng, chờ admin phê duyệt (${slots.length} lịch)`
       : `Đặt phòng thành công (${slots.length} lịch)`;
 
+    // Thông báo chuông cho người đặt — không chờ kết quả để khỏi làm chậm response
+    createNotification({
+      userID,
+      type: 'booked',
+      message: needApproval
+        ? `Yêu cầu đặt phòng "${title}" đang chờ admin phê duyệt`
+        : `Đặt phòng "${title}" thành công`,
+      lineRoomID: insertedIDs[0],
+    });
+
     if (attendees.length > 0) {
       queryOne(
         `SELECT u."FullName" AS "OrganizerName", r."RoomName", a."AreaName"
@@ -225,6 +236,7 @@ const approveBooking = async (req, res) => {
     if (booking.Email) {
       sendBookingStatusEmail({ to: booking.Email, name: booking.FullName, title: booking.Title, roomName: booking.RoomName, areaName: booking.AreaName, timeStart: booking.TimeStart, timeEnd: booking.TimeEnd, approved: true }).catch(e => console.error('[ApproveMail]', e.message));
     }
+    createNotification({ userID: booking.UserID, type: 'approved', message: `Lịch "${booking.Title}" đã được duyệt`, lineRoomID });
     return success(res, null, 'Đã phê duyệt lịch đặt phòng');
   } catch (err) {
     return error(res, 'Lỗi hệ thống', 500, err.message);
@@ -261,6 +273,7 @@ const rejectBooking = async (req, res) => {
     if (booking.Email) {
       sendBookingStatusEmail({ to: booking.Email, name: booking.FullName, title: booking.Title, roomName: booking.RoomName, areaName: booking.AreaName, timeStart: booking.TimeStart, timeEnd: booking.TimeEnd, approved: false, rejectReason: reason.trim() }).catch(e => console.error('[RejectMail]', e.message));
     }
+    createNotification({ userID: booking.UserID, type: 'rejected', message: `Lịch "${booking.Title}" đã bị từ chối: ${reason.trim()}`, lineRoomID });
     return success(res, null, 'Đã từ chối lịch đặt phòng');
   } catch (err) {
     return error(res, 'Lỗi hệ thống', 500, err.message);

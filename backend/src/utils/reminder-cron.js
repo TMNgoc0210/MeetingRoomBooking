@@ -1,6 +1,7 @@
 const cron = require('node-cron');
 const { query, execute } = require('../config/db');
 const { sendReminderEmail } = require('./email');
+const { createNotification } = require('./notification');
 
 // Nhắc trước bao nhiêu phút (default 60). Window ± 15 phút để cron 15 phút không bỏ sót.
 const REMIND_BEFORE = parseInt(process.env.REMINDER_MINUTES_BEFORE) || 60;
@@ -10,17 +11,17 @@ async function runReminder() {
   try {
     // Tìm các booking đã duyệt, chưa gửi nhắc, sắp diễn ra trong cửa sổ thời gian
     const upcoming = await query(
-      `SELECT lr.LineRoomID, lr.UserID, lr.Title, lr.TimeStart, lr.TimeEnd,
-              u.Email  AS OwnerEmail,  u.FullName  AS OwnerName,
-              r.RoomName, a.AreaName
+      `SELECT lr."LineRoomID", lr."UserID", lr."Title", lr."TimeStart", lr."TimeEnd",
+              u."Email"  AS "OwnerEmail",  u."FullName"  AS "OwnerName",
+              r."RoomName", a."AreaName"
        FROM LineRoom lr
-       JOIN [User]  u ON lr.UserID  = u.UserID
-       JOIN Room    r ON lr.RoomID  = r.RoomID
-       LEFT JOIN Area a ON r.AreaID = a.AreaID
-       WHERE lr.Status       = 1
-         AND lr.ReminderSent = 0
-         AND lr.TimeStart >= CONVERT(NVARCHAR(20),DATEADD(MINUTE,${REMIND_BEFORE - WINDOW},GETDATE()),120)
-         AND lr.TimeStart <  CONVERT(NVARCHAR(20),DATEADD(MINUTE,${REMIND_BEFORE + WINDOW},GETDATE()),120)`,
+       JOIN "User"  u ON lr."UserID"  = u."UserID"
+       JOIN Room    r ON lr."RoomID"  = r."RoomID"
+       LEFT JOIN Area a ON r."AreaID" = a."AreaID"
+       WHERE lr."Status"       = 1
+         AND lr."ReminderSent" = 0
+         AND lr."TimeStart" >= TO_CHAR(NOW() + INTERVAL '${REMIND_BEFORE - WINDOW} minutes', 'YYYY-MM-DD HH24:MI:SS')
+         AND lr."TimeStart" <  TO_CHAR(NOW() + INTERVAL '${REMIND_BEFORE + WINDOW} minutes', 'YYYY-MM-DD HH24:MI:SS')`,
       {}
     );
 
@@ -50,13 +51,19 @@ async function runReminder() {
           console.error(`[Reminder] Lỗi gửi mail cho ${booking.OwnerEmail}:`, e.message);
         }
       }
+      createNotification({
+        userID: booking.UserID,
+        type: 'reminder',
+        message: `Sắp đến giờ họp "${booking.Title}" lúc ${booking.TimeStart.slice(11, 16)}`,
+        lineRoomID: booking.LineRoomID,
+      });
 
       // Gửi cho danh sách attendees
       const attendees = await query(
-        `SELECT u.Email, u.FullName
+        `SELECT u."Email", u."FullName", u."UserID"
          FROM BookingAttendee ba
-         JOIN [User] u ON ba.UserID = u.UserID
-         WHERE ba.LineRoomID = @lineRoomID AND u.Email != '' AND u.Email IS NOT NULL`,
+         JOIN "User" u ON ba."UserID" = u."UserID"
+         WHERE ba."LineRoomID" = @lineRoomID AND u."Email" != '' AND u."Email" IS NOT NULL`,
         { lineRoomID: booking.LineRoomID }
       );
 
@@ -66,11 +73,17 @@ async function runReminder() {
         } catch (e) {
           console.error(`[Reminder] Lỗi gửi mail cho ${att.Email}:`, e.message);
         }
+        createNotification({
+          userID: att.UserID,
+          type: 'reminder',
+          message: `Sắp đến giờ họp "${booking.Title}" lúc ${booking.TimeStart.slice(11, 16)}`,
+          lineRoomID: booking.LineRoomID,
+        });
       }
 
       // Đánh dấu đã gửi
       await execute(
-        `UPDATE LineRoom SET ReminderSent = 1 WHERE LineRoomID = @lineRoomID`,
+        `UPDATE LineRoom SET "ReminderSent" = 1 WHERE "LineRoomID" = @lineRoomID`,
         { lineRoomID: booking.LineRoomID }
       );
 
