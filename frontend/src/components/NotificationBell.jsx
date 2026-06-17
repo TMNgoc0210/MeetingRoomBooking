@@ -7,6 +7,7 @@ const TYPE_ICON = {
   pending:  { icon: 'fa-hourglass-half', color: '#f59e0b' },
   approved: { icon: 'fa-check-circle',   color: '#16a34a' },
   rejected: { icon: 'fa-times-circle',   color: '#dc2626' },
+  cancelled:{ icon: 'fa-ban',            color: '#6b7280' },
   reminder: { icon: 'fa-clock',          color: '#c9a96e' },
 }
 

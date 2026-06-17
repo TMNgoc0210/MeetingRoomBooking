@@ -284,7 +284,7 @@ const cancelBooking = async (req, res) => {
   try {
     const lineRoomID = parseInt(req.params.id);
     const booking = await queryOne(
-      `SELECT "UserID","Status","TimeStart" FROM LineRoom WHERE "LineRoomID" = @lineRoomID`,
+      `SELECT "UserID","Status","TimeStart","Title" FROM LineRoom WHERE "LineRoomID" = @lineRoomID`,
       { lineRoomID }
     );
     if (!booking) return notFound(res, 'Không tìm thấy lịch đặt');
@@ -304,6 +304,12 @@ const cancelBooking = async (req, res) => {
       `UPDATE LineRoom SET "Status"=@status, "CancelledAt"=NOW() WHERE "LineRoomID" = @lineRoomID`,
       { status: STATUS.CANCELLED, lineRoomID }
     );
+    createNotification({
+      userID: booking.UserID,
+      type: 'cancelled',
+      message: `Lịch "${booking.Title}" đã được huỷ`,
+      lineRoomID,
+    });
     return success(res, null, 'Đã huỷ lịch đặt phòng');
   } catch (err) {
     return error(res, 'Lỗi hệ thống', 500, err.message);
