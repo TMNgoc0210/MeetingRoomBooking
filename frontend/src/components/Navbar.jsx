@@ -110,6 +110,7 @@ const Navbar = () => {
         <div className="navbar-right">
           {user ? (
             <>
+              {/* Dropdown avatar + tên user (Cá nhân / Đổi mật khẩu / theme / Đăng xuất) */}
               <div className="user-menu" ref={dropRef}>
                 <button className="user-btn" onClick={() => setDropdownOpen((v) => !v)}>
                   <img
@@ -140,6 +141,7 @@ const Navbar = () => {
                   </div>
                 )}
               </div>
+              {/* Chuông thông báo — đặt ngay sau avatar (bên phải) theo yêu cầu thiết kế */}
               <NotificationBell />
             </>
           ) : (

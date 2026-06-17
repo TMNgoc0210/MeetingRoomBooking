@@ -1,7 +1,22 @@
+/**
+ * NotificationBell.jsx — Icon chuông trong Navbar (đặt cạnh avatar)
+ * ─────────────────────────────────────────────────────────────────────────
+ * Luồng dữ liệu:
+ *   - Backend tạo thông báo (createNotification) khi: đặt phòng, duyệt,
+ *     từ chối, huỷ lịch, hoặc cron nhắc lịch sắp đến giờ họp.
+ *   - Component này KHÔNG dùng realtime (WebSocket/SSE) mà dùng polling
+ *     (gọi lại API mỗi 30s) — chọn cách này vì đơn giản, không cần giữ
+ *     kết nối lâu (phù hợp Render free tier hay bị sleep/restart).
+ *   - Số đếm (unreadCount) và danh sách chi tiết (items) là 2 API riêng:
+ *     getUnreadCount() gọi liên tục mỗi 30s để cập nhật badge đỏ,
+ *     getMy() chỉ gọi 1 lần khi user thật sự bấm mở dropdown — đỡ tốn
+ *     request khi chuông chưa được mở.
+ */
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { notificationService } from '../services'
 
+// Mỗi loại thông báo (Type ở backend) ứng với 1 icon FontAwesome + màu riêng
 const TYPE_ICON = {
   booking:  { icon: 'fa-calendar-plus',  color: '#3b82f6' },
   pending:  { icon: 'fa-hourglass-half', color: '#f59e0b' },
@@ -11,6 +26,7 @@ const TYPE_ICON = {
   reminder: { icon: 'fa-clock',          color: '#c9a96e' },
 }
 
+// Đổi "CreateDate" (string "YYYY-MM-DD HH:MI:SS") thành dạng "x phút/giờ/ngày trước"
 const timeAgo = (createDate) => {
   if (!createDate) return ''
   const diffMs = Date.now() - new Date(createDate.replace(' ', 'T')).getTime()
@@ -35,12 +51,14 @@ const NotificationBell = () => {
       .catch(() => {})
   }
 
+  // Poll số chưa đọc mỗi 30s để badge đỏ tự cập nhật dù user không bấm vào chuông
   useEffect(() => {
     fetchUnread()
     const interval = setInterval(fetchUnread, 30000)
     return () => clearInterval(interval)
   }, [])
 
+  // Bấm ra ngoài dropdown thì tự đóng lại (giống cách user-menu avatar đang làm)
   useEffect(() => {
     const handler = (e) => {
       if (ref.current && !ref.current.contains(e.target)) setOpen(false)
@@ -49,6 +67,8 @@ const NotificationBell = () => {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
+  // Chỉ tải danh sách chi tiết (20 thông báo gần nhất) khi user thực sự mở dropdown,
+  // không tải sẵn từ đầu để tránh gọi API thừa
   const toggleOpen = () => {
     const next = !open
     setOpen(next)
@@ -59,6 +79,8 @@ const NotificationBell = () => {
     }
   }
 
+  // Bấm vào 1 thông báo: đánh dấu đã đọc (cập nhật UI ngay, không chờ API trả về)
+  // + nếu thông báo gắn với 1 lịch (LineRoomID) thì điều hướng sang trang lịch
   const handleItemClick = (item) => {
     if (!item.IsRead) {
       notificationService.markRead(item.NotificationID).catch(() => {})

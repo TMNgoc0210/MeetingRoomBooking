@@ -236,6 +236,7 @@ const approveBooking = async (req, res) => {
     if (booking.Email) {
       sendBookingStatusEmail({ to: booking.Email, name: booking.FullName, title: booking.Title, roomName: booking.RoomName, areaName: booking.AreaName, timeStart: booking.TimeStart, timeEnd: booking.TimeEnd, approved: true }).catch(e => console.error('[ApproveMail]', e.message));
     }
+    // Báo cho người đặt biết lịch của họ đã được duyệt (hiện trong chuông thông báo)
     createNotification({ userID: booking.UserID, type: 'approved', message: `Lịch "${booking.Title}" đã được duyệt`, lineRoomID });
     return success(res, null, 'Đã phê duyệt lịch đặt phòng');
   } catch (err) {
@@ -273,6 +274,7 @@ const rejectBooking = async (req, res) => {
     if (booking.Email) {
       sendBookingStatusEmail({ to: booking.Email, name: booking.FullName, title: booking.Title, roomName: booking.RoomName, areaName: booking.AreaName, timeStart: booking.TimeStart, timeEnd: booking.TimeEnd, approved: false, rejectReason: reason.trim() }).catch(e => console.error('[RejectMail]', e.message));
     }
+    // Báo cho người đặt biết lịch bị từ chối + kèm lý do (reason) trong nội dung thông báo
     createNotification({ userID: booking.UserID, type: 'rejected', message: `Lịch "${booking.Title}" đã bị từ chối: ${reason.trim()}`, lineRoomID });
     return success(res, null, 'Đã từ chối lịch đặt phòng');
   } catch (err) {
@@ -304,6 +306,7 @@ const cancelBooking = async (req, res) => {
       `UPDATE LineRoom SET "Status"=@status, "CancelledAt"=NOW() WHERE "LineRoomID" = @lineRoomID`,
       { status: STATUS.CANCELLED, lineRoomID }
     );
+    // Báo cho chủ lịch là lịch đã bị huỷ — kể cả khi chính họ tự huỷ (để có lịch sử trong chuông)
     createNotification({
       userID: booking.UserID,
       type: 'cancelled',

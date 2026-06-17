@@ -153,6 +153,8 @@ export const roleService = {
   delete: (id) => api.delete(`/roles/${id}`),
 }
 
+// _silent: true — không cho axios interceptor redirect về login nếu lỗi 401,
+// vì các call này chạy nền (polling), không phải hành động chính của user
 export const notificationService = {
   getMy: (limit = 20) => api.get('/notifications', { params: { limit }, _silent: true }),
   getUnreadCount: () => api.get('/notifications/unread-count', { _silent: true }),

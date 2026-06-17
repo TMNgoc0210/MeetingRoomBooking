@@ -1,3 +1,17 @@
+/**
+ * reminder-cron.js — Cron job nhắc lịch họp sắp diễn ra (chạy mỗi 15 phút)
+ * ─────────────────────────────────────────────────────────────────────────
+ * Với mỗi booking đã APPROVED (Status=1) và sắp diễn ra trong khoảng
+ * [REMIND_BEFORE - WINDOW, REMIND_BEFORE + WINDOW] phút nữa:
+ *   1. Gửi email nhắc cho chủ lịch + tất cả attendee được mời
+ *   2. Tạo notification (type='reminder') cho chủ lịch + từng attendee
+ *      → để họ thấy nhắc nhở ngay trong chuông trên web, không chỉ qua email
+ *   3. Đánh dấu ReminderSent=1 để không nhắc lại lần cron tiếp theo
+ *
+ * Vì sao có WINDOW ±15 phút: cron chạy mỗi 15 phút, nếu chỉ check đúng
+ * 1 thời điểm thì có thể "lướt qua" booking nằm giữa 2 lần chạy — mở rộng
+ * cửa sổ ra ±15 phút để chắc chắn mọi booking đều rơi vào ít nhất 1 lần quét.
+ */
 const cron = require('node-cron');
 const { query, execute } = require('../config/db');
 const { sendReminderEmail } = require('./email');

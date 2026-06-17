@@ -144,6 +144,8 @@ async function main() {
     )
   `);
 
+  // Bảng lưu thông báo cho chuông trên Navbar (xem utils/notification.js)
+  // Type: 'booked' | 'approved' | 'rejected' | 'cancelled' | 'reminder'
   await pool.query(`
     CREATE TABLE IF NOT EXISTS Notification (
       "NotificationID" SERIAL PRIMARY KEY,

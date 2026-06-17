@@ -27,6 +27,7 @@
  *   /api/chat       — AI chatbot
  *   /api/settings   — thiết lập chung hệ thống
  *   /api/roles      — quản lý vai trò
+ *   /api/notifications — thông báo trong app (chuông trên Navbar)
  */
 const express = require('express');
 const cors = require('cors');
