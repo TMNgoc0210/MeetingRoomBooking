@@ -70,11 +70,12 @@ const getSummary = async (req, res) => {
        WHERE LEFT("TimeStart",10) = TO_CHAR(NOW(), 'YYYY-MM-DD')`
     );
 
+    // pg trả COUNT(*) dưới dạng string (bigint) — ép về Number để frontend dùng toFixed()/so sánh số được
     return success(res, {
-      totalRooms: totalRooms.total,
-      totalUsers: totalUsers.total,
-      totalBookings: totalBookings.total,
-      todayBookings: todayBookings.total,
+      totalRooms: Number(totalRooms.total),
+      totalUsers: Number(totalUsers.total),
+      totalBookings: Number(totalBookings.total),
+      todayBookings: Number(todayBookings.total),
     });
   } catch (err) {
     return error(res, 'Lỗi hệ thống', 500, err.message);
@@ -108,7 +109,14 @@ const getRoomUsage = async (req, res) => {
        ORDER BY bookingCount DESC`,
       { prefix }
     );
-    return success(res, rows);
+    // pg trả COUNT()/SUM() dưới dạng string (bigint/numeric) — ép về Number,
+    // nếu không Report.jsx gọi r.totalHours.toFixed() sẽ crash (String không có toFixed)
+    const data = rows.map((r) => ({
+      ...r,
+      bookingCount: Number(r.bookingCount),
+      totalHours: Number(r.totalHours),
+    }));
+    return success(res, data);
   } catch (err) {
     return error(res, 'Lỗi hệ thống', 500, err.message);
   }
